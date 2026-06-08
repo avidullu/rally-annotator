@@ -1,4 +1,4 @@
---[[ rally_annotator.lua  --  VLC Lua EXTENSION (v1.3)
+--[[ rally_annotator.lua  --  VLC Lua EXTENSION (v1.3.1)
 
   Rally Annotator for NET-SEPARATED RACQUET SPORTS
   (badminton · tennis · table tennis · pickleball · padel)
@@ -57,7 +57,7 @@
 function descriptor()
   return {
     title       = "Rally Annotator",
-    version     = "1.3",
+    version     = "1.3.1",
     author      = "Avi Dullu",
     url         = "https://github.com/avidullu/rally-annotator",
     shortdesc   = "Mark rally start/end + a point-ending reason to a CSV (net-separated racquet sports)",
@@ -87,10 +87,12 @@ local SPORTS = {
 }
 local HEADER = "rally_number,start_time,end_time,ending_reason,sport\n"
 
+-- reason/sport -> id lookups. POPULATED IN activate(), NOT here: VLC scans an
+-- extension's descriptor() in a restricted Lua sandbox that lacks base globals
+-- like ipairs, so calling ipairs at top level makes the whole extension fail to
+-- load (it then never appears under the View menu).
 local REASON_ID = {}
-for i, v in ipairs(REASONS) do REASON_ID[v] = i end
 local SPORT_ID = {}
-for i, v in ipairs(SPORTS) do SPORT_ID[v] = i end
 
 -- In-dialog help (rendered into the status panel by the HELP button). Basic HTML
 -- only (<b>, <i>, <br>) for portability across the Qt and macOS dialog renderers.
@@ -636,6 +638,10 @@ end
 -- Lifecycle
 --------------------------------------------------------------------------------
 function activate()
+  -- Build the id lookups here (full Lua environment), not at top level (see note
+  -- where REASON_ID/SPORT_ID are declared -- the descriptor scan sandbox lacks ipairs).
+  for i, v in ipairs(REASONS) do REASON_ID[v] = i end
+  for i, v in ipairs(SPORTS) do SPORT_ID[v] = i end
   mode = "new"
   edit_index = nil
   help_visible = false

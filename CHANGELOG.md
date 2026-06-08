@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.3.1 — 2026-06-08
+- **Fix: the extension failed to load and never appeared under the View menu.** v1.3 built the `REASON_ID`/`SPORT_ID`
+  lookup tables with **top-level `ipairs` loops**, which run during VLC's *descriptor scan* — a restricted Lua sandbox
+  that does not expose base globals like `ipairs` — so the whole script errored at scan time
+  (`attempt to call global 'ipairs' (a nil value)`) and VLC skipped it. Moved that table-building into `activate()`
+  (the full Lua environment); no top-level code now calls any global function. Verified via VLC's `-vv` extension-scan log.
+
 ## v1.3 — 2026-06-08
 - **Ending reason is now required and non-sticky:** a `-- choose reason --` placeholder is the default, Save is
   refused until a real reason is picked, and the reason **resets after every save** (fixes the bug where the
