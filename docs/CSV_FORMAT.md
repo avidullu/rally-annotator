@@ -14,7 +14,7 @@ rally_number,start_time,end_time,ending_reason,sport
 | `rally_number` | int | 1-based, monotonic; continues across re-opening the same CSV |
 | `start_time` | float | rally start, **decimal seconds** from the video start |
 | `end_time` | float | rally end, decimal seconds (always `> start_time`) |
-| `ending_reason` | enum | `winner` / `forced_error` / `unforced_error` / `service_fault` / `let` / `other` — see the decision guide in [ENDING_REASONS.md](ENDING_REASONS.md) |
+| `ending_reason` | enum | `unknown` (default) / `winner` / `forced_error` / `unforced_error` / `service_fault` / `let` / `other` — see the decision guide in [ENDING_REASONS.md](ENDING_REASONS.md) |
 | `sport` | enum | `badminton` / `tennis` / `table_tennis` / `pickleball` / `padel` |
 
 Notes:

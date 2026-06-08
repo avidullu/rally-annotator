@@ -1,15 +1,19 @@
 # Ending reasons — what they mean & how to label them
 
 The `ending_reason` column records **why the rally (point) ended**, judged from the
-**last shot**. There are six values, shared across all the net-separated racquet sports
+**last shot**. There are seven values, shared across all the net-separated racquet sports
 this tool supports (badminton, tennis, table tennis, pickleball, padel):
 
 ```
-winner | forced_error | unforced_error | service_fault | let | other
+unknown | winner | forced_error | unforced_error | service_fault | let | other
 ```
 
-**One core principle:** every reason **except `winner`** is charged to the player/side
-that **LOST** the rally. `winner` is the only one that credits the side that **won** it.
+**`unknown` is the default** — the annotator resets the reason to `unknown` after every save, so a
+rally you didn't classify is honestly recorded as `unknown` (never the previous rally's reason). Set a
+specific reason when you can; `unknown` simply marks rallies still needing a verdict.
+
+**One core principle:** every reason **except `winner`** (and the neutral `unknown`) is charged to the
+player/side that **LOST** the rally. `winner` is the only one that credits the side that **won** it.
 
 This guide is written for a human rater clicking through a match. Where a rule comes from
 the laws of the sport it is marked **[rule]**; where it is an analytics *convention* (a

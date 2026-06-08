@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.4 — 2026-06-08
+- **Fix: the Help button now toggles reliably.** It previously got "stuck" showing help — VLC didn't repaint the
+  in-place text swap on the shared status widget. Help is now a **dedicated panel** added/removed via
+  `add_html`/`del_widget`, which forces a real layout change VLC renders every time. (Verified with a headless
+  `lua5.1` harness that stubs the VLC dialog API and drives the toggle.)
+- **Feature: "Next rally #" field** — choose where numbering resumes from (restart at 1, continue from 50, fill a
+  gap, …). Defaults to the natural next number, auto-advances to the next **free** number after each save, and
+  refuses a number that already exists in the CSV. The Save button shows the number it will write.
+- **Fix: the Ending reason no longer gets "stuck".** Picking a reason (e.g. `winner`) used to block the next rally
+  from using the same one — VLC didn't repaint the `clear()`-based dropdown reset. The reason now resets to a real,
+  savable **`unknown`** default by recreating the dropdown (same `del_widget` technique as Help), so consecutive
+  rallies can share a reason and a forgotten pick records `unknown` rather than the previous rally's reason. Reason
+  is no longer a hard-required field; `unknown` was added to the documented vocabulary.
+- **Fix: removing a rally no longer leaves a numbering gap.** `Undo last` and `Delete selected` now re-sync the
+  "Next rally #" field to the current data.
+
 ## v1.3.1 — 2026-06-08
 - **Fix: the extension failed to load and never appeared under the View menu.** v1.3 built the `REASON_ID`/`SPORT_ID`
   lookup tables with **top-level `ipairs` loops**, which run during VLC's *descriptor scan* — a restricted Lua sandbox

@@ -1,4 +1,4 @@
---[[ rally_annotator.lua  --  VLC Lua EXTENSION (v1.3.1)
+--[[ rally_annotator.lua  --  VLC Lua EXTENSION (v1.4)
 
   Rally Annotator for NET-SEPARATED RACQUET SPORTS
   (badminton · tennis · table tennis · pickleball · padel)
@@ -57,13 +57,13 @@
 function descriptor()
   return {
     title       = "Rally Annotator",
-    version     = "1.3.1",
+    version     = "1.4",
     author      = "Avi Dullu",
     url         = "https://github.com/avidullu/rally-annotator",
     shortdesc   = "Mark rally start/end + a point-ending reason to a CSV (net-separated racquet sports)",
     description =
         "Mark each rally's START and END while you watch, tag WHY the point ended "
-     .. "(winner / forced_error / unforced_error / service_fault / let / other), and append "
+     .. "(unknown / winner / forced_error / unforced_error / service_fault / let / other), and append "
      .. "one CSV row per rally next to the video "
      .. "(rally_number,start_time,end_time,ending_reason,sport; decimal seconds). "
      .. "Two-step Save (Mark END, then Save Rally) with a REQUIRED, non-sticky reason; "
@@ -78,7 +78,9 @@ end
 -- Config / constants
 --------------------------------------------------------------------------------
 -- Net-separated racquet sports share a forced/unforced-error point-stop taxonomy.
-local REASON_PLACEHOLDER = "-- choose reason --"
+-- "unknown" is the default/reset value: a real, savable reason meaning "not yet
+-- classified" (so a forgotten pick records 'unknown', never the previous rally's reason).
+local REASON_DEFAULT = "unknown"
 local REASONS = {
   "winner", "forced_error", "unforced_error", "service_fault", "let", "other"
 }
@@ -101,10 +103,10 @@ local HELP_HTML = [==[
 1. Pick the <b>Sport</b> (top). It stays set across rallies.<br>
 2. When a rally begins, click <b>Mark START</b> (pause/scrub first for frame accuracy &mdash; it snapshots the current playback time into the Start field).<br>
 3. When the rally ends, click <b>Mark END</b>. You may fine-tune the Start/End seconds by editing those fields directly.<br>
-4. Choose the <b>Ending reason</b> (REQUIRED) and click <b>Save Rally</b> &mdash; one CSV row is written next to the video.<br>
-5. The reason RESETS after every save, so it is never reused by accident.<br>
+4. Choose the <b>Ending reason</b> (or leave it as <b>unknown</b>) and click <b>Save Rally</b> &mdash; one CSV row is written next to the video.<br>
+5. The reason RESETS to <b>unknown</b> after every save (never silently reused), and you can pick the same reason on consecutive rallies.<br>
 6. <b>Recent rallies</b>: select a row, then <b>Edit selected</b> (loads it back into the fields) or <b>Delete selected</b>. <b>Undo last</b> removes the most recent row (the button shows which, e.g. <i>Undo last (#7)</i>), or clears an in-progress mark, or cancels an edit.<br>
-7. <b>Resuming later:</b> labels are saved to the CSV next to the video as you go. Re-open the SAME video and enable the extension &mdash; it reloads your existing rallies and continues numbering. If you switch videos with this dialog open, click <b>Refresh</b> to load the current video's rallies. (The video's playback position is not restored &mdash; scrub to where you stopped.)<br>
+7. <b>Resuming later:</b> labels are saved to the CSV next to the video as you go. Re-open the SAME video and enable the extension &mdash; it reloads your existing rallies and continues numbering. Set the <b>Next rally #</b> field (top right) to resume numbering from any value (e.g. restart at 1, or continue from 50); it auto-advances after each save. If you switch videos with this dialog open, click <b>Refresh</b> to load the current video's rallies. (The video's playback position is not restored &mdash; scrub to where you stopped.)<br>
 <br>
 <b>Ending reasons &mdash; what they mean (pick the one that says WHY the rally ended).</b><br>
 All reasons except <i>winner</i> are charged to the side that LOST the rally.<br>
@@ -114,6 +116,7 @@ All reasons except <i>winner</i> are charged to the side that LOST the rally.<br
 &bull; <b>service_fault</b> &mdash; the point ended on the SERVE: serve into the net, out of the service box, illegal action/foot fault, or a double fault (tennis/padel).<br>
 &bull; <b>let</b> &mdash; the rally is REPLAYED under the rules (no point): e.g. a tennis/table-tennis serve that clips the net and is otherwise good, or outside interference.<br>
 &bull; <b>other</b> &mdash; anything else (occluded footage, injury/retirement, penalty, hindrance). Use sparingly.<br>
+&bull; <b>unknown</b> &mdash; the default; this rally hasn't been classified yet (pick a specific reason when you can).<br>
 <br>
 <b>Quick cases</b><br>
 &bull; Ball/shuttle lands <b>OUT</b> (past the baseline / outside the lines): it is the hitter's miss &mdash; <b>forced</b> if they were under pressure, <b>unforced</b> if it was a comfortable ball. (OUT is NOT automatically forced, and never a winner for the opponent.)<br>
@@ -137,12 +140,13 @@ local w_end             -- end-time text input (editable seconds)
 local w_list            -- recent-rallies list widget
 local w_save            -- "Save Rally" / "Save changes" button (relabeled by state)
 local w_undo            -- "Undo last" button (relabeled to show which row it removes)
+local w_next            -- "Next rally #" text input (lets you resume numbering anywhere)
 local w_help_btn        -- the Help button (relabeled "Hide help" when open)
+local w_help            -- the help panel widget; nil when hidden (toggled via del_widget)
 
 local rows = {}         -- in-memory rally rows: { n, s, e, reason, sport, [extra] }
 local mode = "new"      -- "new" (marking a fresh rally) or "edit" (editing a row)
 local edit_index = nil  -- index into rows when mode == "edit"
-local help_visible = false
 local out_path          -- resolved CSV path (set on activate; re-resolved by Refresh)
 
 --------------------------------------------------------------------------------
@@ -298,9 +302,30 @@ local function get_field_num(w)
   return tonumber(t)
 end
 
+-- The number the NEXT new rally will get. Defaults to next_rally_number(), but the
+-- user can type any value into the "Next rally #" field to resume/insert anywhere.
+local function planned_next_number()
+  local v = get_field_num(w_next)
+  if v and v >= 1 then return math.floor(v) end
+  return next_rally_number()
+end
+
+-- Reset the "Next rally #" field to the natural next number for the current CSV.
+local function refresh_next_field()
+  if w_next then w_next:set_text(tostring(next_rally_number())) end
+end
+
 local function index_of_rally(n)
   for i, r in ipairs(rows) do if r.n == n then return i end end
   return nil
+end
+
+-- Smallest integer >= start that is not already a rally_number (auto-advance skips
+-- over occupied numbers so consecutive saves never walk into an existing one).
+local function next_free_from(start)
+  local n = start
+  while index_of_rally(n) do n = n + 1 end
+  return n
 end
 
 -- First selected rally_number in the recent list, or nil. get_selection() returns
@@ -315,20 +340,26 @@ local function selected_rally_number()
   return nil
 end
 
--- Dropdowns have no set_value in 3.0.x; the FIRST add_value after a clear() is
--- auto-selected. So we reset/select by clear()+rebuild with the desired value first.
-local function rebuild_reason_placeholder()
-  if not w_reason then return end
-  w_reason:clear()
-  w_reason:add_value(REASON_PLACEHOLDER, 0)        -- id 0 = "not chosen"
+-- Dropdowns have no set_value in 3.0.x. clear()+re-add did NOT repaint reliably in
+-- VLC (the selection got "stuck" on the previous reason), so we RECREATE the dropdown
+-- at the SAME grid cell via del_widget+add_dropdown -- a real widget swap VLC renders
+-- every time, with no net layout change. The first value added is auto-selected, so we
+-- add the value we want shown first.
+local function rebuild_reason_default()
+  if not d then return end
+  if w_reason then d:del_widget(w_reason) end
+  w_reason = d:add_dropdown(2, 2, 1, 1)
+  w_reason:add_value(REASON_DEFAULT, 0)            -- "unknown" default (id 0)
   for i, v in ipairs(REASONS) do w_reason:add_value(v, i) end
 end
 
 local function rebuild_reason_selected(sel)
-  if not w_reason then return end
-  w_reason:clear()
-  local id = REASON_ID[sel] or 99
-  w_reason:add_value(sel, id)                       -- first => shown selected
+  if not d then return end
+  if not sel or sel == "" then sel = REASON_DEFAULT end
+  if w_reason then d:del_widget(w_reason) end
+  w_reason = d:add_dropdown(2, 2, 1, 1)
+  w_reason:add_value(sel, REASON_ID[sel] or 0)     -- selected first
+  if sel ~= REASON_DEFAULT then w_reason:add_value(REASON_DEFAULT, 0) end
   for i, v in ipairs(REASONS) do
     if v ~= sel then w_reason:add_value(v, i) end
   end
@@ -372,7 +403,7 @@ local function refresh_buttons()
       local s = get_field_num(w_start)
       local e = get_field_num(w_end)
       if s and e then
-        w_save:set_text(string.format("Save Rally (#%d)", next_rally_number()))
+        w_save:set_text(string.format("Save Rally (#%d)", planned_next_number()))
       else
         w_save:set_text("Save Rally")
       end
@@ -398,10 +429,6 @@ end
 
 local function set_status(msg)
   if not w_status then return end
-  if help_visible then           -- any status update closes the help view
-    help_visible = false
-    if w_help_btn then w_help_btn:set_text("Help") end
-  end
   local mode_line
   if mode == "edit" and edit_index and rows[edit_index] then
     mode_line = string.format(
@@ -427,7 +454,7 @@ local function reset_form()
   edit_index = nil
   if w_start then w_start:set_text("") end
   if w_end then w_end:set_text("") end
-  rebuild_reason_placeholder()
+  rebuild_reason_default()
   refresh_buttons()
   if d then d:update() end
 end
@@ -452,6 +479,7 @@ local function sync_to_current_video()
   local new_path = resolve_out_path()
   if new_path == out_path then
     load_rows()                  -- re-read in case the file changed on disk
+    refresh_next_field()
     refresh_list(); refresh_buttons()
     set_status(string.format("Refreshed. %d rallies loaded for this video.", #rows))
     return
@@ -459,6 +487,7 @@ local function sync_to_current_video()
   out_path = new_path            -- switched videos -> repoint + resume that file
   load_rows()
   reset_form()
+  refresh_next_field()
   refresh_list()
   refresh_buttons()
   set_status(string.format(
@@ -494,11 +523,8 @@ function save_rally()
     set_status("END must be later than START (rally must be > 0s).")
     return
   end
-  local rid, reason = w_reason:get_value()   -- (id, text)
-  if not rid or rid == 0 or not reason or reason == "" or reason == REASON_PLACEHOLDER then
-    set_status("Choose an Ending reason -- it is required (still on \"" .. REASON_PLACEHOLDER .. "\").")
-    return
-  end
+  local _, reason = w_reason:get_value()   -- (id, text); "unknown" is allowed
+  if not reason or reason == "" then reason = REASON_DEFAULT end
   local _, sport = w_sport:get_value()
   if not sport or sport == "" then sport = SPORTS[1] end
 
@@ -510,10 +536,15 @@ function save_rally()
     if not ok then set_status("WRITE FAILED: " .. tostring(err)); return end
     msg = string.format("Updated rally #%d: %s -> %s  [%s, %s].", r.n, fmt_clock(s), fmt_clock(e), reason, sport)
   else
-    local n = next_rally_number()
+    local n = planned_next_number()
+    if index_of_rally(n) then
+      set_status(string.format("Rally #%d already exists -- set \"Next rally #\" to a free number.", n))
+      return
+    end
     rows[#rows + 1] = { n = n, s = s, e = e, reason = reason, sport = sport }
     local ok, err = save_all()
     if not ok then rows[#rows] = nil; set_status("WRITE FAILED: " .. tostring(err)); return end
+    if w_next then w_next:set_text(tostring(next_free_from(n + 1))) end   -- next free number
     msg = string.format("Saved rally #%d: %s -> %s  [%s, %s].", n, fmt_clock(s), fmt_clock(e), reason, sport)
   end
 
@@ -547,6 +578,7 @@ function delete_selected()
   local ok, err = save_all()
   if not ok then set_status("WRITE FAILED: " .. tostring(err)); return end
   reset_form()
+  refresh_next_field()
   refresh_list()
   set_status(string.format("Deleted rally #%d. %d remaining.", n, #rows))
 end
@@ -569,6 +601,7 @@ function undo_last()
   local ok, err = save_all()
   if not ok then rows[#rows + 1] = last; set_status("WRITE FAILED: " .. tostring(err)); return end
   refresh_list()
+  refresh_next_field()
   refresh_buttons()
   set_status(string.format("Removed last rally #%d. %d remaining.", last.n, #rows))
 end
@@ -578,14 +611,18 @@ function refresh_now()
 end
 
 function show_help()
-  help_visible = not help_visible
-  if w_help_btn then w_help_btn:set_text(help_visible and "Hide help" or "Help") end
-  if help_visible then
-    if w_status then w_status:set_text(HELP_HTML) end
-    if d then d:update() end
+  -- Toggle a DEDICATED help panel by adding/removing a widget. In-place set_text on
+  -- the shared status widget did not repaint reliably in VLC (the panel got "stuck");
+  -- add_html + del_widget forces a real layout change that VLC renders every time.
+  if w_help then
+    if d then d:del_widget(w_help) end
+    w_help = nil
+    if w_help_btn then w_help_btn:set_text("Help") end
   else
-    set_status("Closed help.")
+    if d then w_help = d:add_html(HELP_HTML, 1, 14, 4, 8) end
+    if w_help_btn then w_help_btn:set_text("Hide help") end
   end
+  if d then d:update() end
 end
 
 --------------------------------------------------------------------------------
@@ -599,8 +636,10 @@ local function create_dialog()
   for i, v in ipairs(SPORTS) do w_sport:add_value(v, i) end   -- badminton first => default
   w_help_btn = d:add_button("Help", show_help, 4, 1, 1, 1)
 
-  d:add_label("Ending reason (required):", 1, 2, 1, 1)
-  w_reason = d:add_dropdown(2, 2, 2, 1)
+  d:add_label("Ending reason:", 1, 2, 1, 1)
+  rebuild_reason_default()                 -- creates w_reason at (2,2,1,1)
+  d:add_label("Next rally #:", 3, 2, 1, 1)
+  w_next = d:add_text_input("", 4, 2, 1, 1)
 
   d:add_label("Start (s):", 1, 3, 1, 1)
   w_start = d:add_text_input("", 2, 3, 1, 1)
@@ -611,7 +650,7 @@ local function create_dialog()
   d:add_button("Mark END",   mark_end,   2, 4, 1, 1)
   w_save = d:add_button("Save Rally", save_rally, 3, 4, 2, 1)
 
-  w_status = d:add_html("", 1, 5, 4, 2)   -- rich-text so multi-line (<br>) renders; also hosts Help
+  w_status = d:add_html("", 1, 5, 4, 2)   -- rich-text status panel (multi-line via <br>)
 
   d:add_label("Recent rallies (select one, then Edit/Delete):", 1, 7, 4, 1)
   w_list = d:add_list(1, 8, 4, 4)
@@ -621,7 +660,7 @@ local function create_dialog()
   w_undo = d:add_button("Undo last", undo_last,     3, 12, 1, 1)
   d:add_button("Refresh",         refresh_now,     4, 12, 1, 1)
 
-  rebuild_reason_placeholder()
+  refresh_next_field()
   refresh_list()
   refresh_buttons()
   d:show()
@@ -644,7 +683,8 @@ function activate()
   for i, v in ipairs(SPORTS) do SPORT_ID[v] = i end
   mode = "new"
   edit_index = nil
-  help_visible = false
+  w_help = nil
+  w_reason = nil          -- niled so the first rebuild on a re-enable doesn't del a stale handle
   out_path = resolve_out_path()
   load_rows()             -- continue an existing CSV (numbering + recent list)
   create_dialog()
@@ -652,6 +692,7 @@ end
 
 function deactivate()
   if d then d:delete(); d = nil end
+  w_help = nil
 end
 
 function close()

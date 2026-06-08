@@ -69,14 +69,16 @@ Net-separated racquet sports share a forced/unforced-error point-stop taxonomy, 
 | pickleball | service_fault for faults; treat "let" per local rules |
 | padel | net-separated; rally boundaries as in tennis |
 
-`ending_reason` ∈ `{winner, forced_error, unforced_error, service_fault, let, other}` — a shared vocabulary
-across these sports. Keep to these values for clean downstream aggregation.
+`ending_reason` ∈ `{unknown, winner, forced_error, unforced_error, service_fault, let, other}` — a shared
+vocabulary across these sports. Keep to these values for clean downstream aggregation.
 
 ### What the ending reasons mean
-Every reason **except `winner`** is charged to the side that **lost** the rally.
+`unknown` is the **default** (the field resets to it after every save); every other reason **except `winner`** is
+charged to the side that **lost** the rally.
 
 | Reason | When the rally ended because… |
 |---|---|
+| `unknown` | **default** — not classified yet. A save with no reason picked records `unknown` (never the previous rally's reason); set a specific reason when you can. |
 | `winner` | the last shot landed **in** and went unreturned (opponent couldn't reach it / only waved). A clean ace counts here. |
 | `forced_error` | the loser **missed** (out or into the net) while **under pressure** — stretched, rushed, jammed, handling the opponent's pace/spin/depth. |
 | `unforced_error` | the loser **missed a routine shot** they had time **and** position to make, with little or no pressure. |
