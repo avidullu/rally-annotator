@@ -103,10 +103,10 @@ local HELP_HTML = [==[
 1. Pick the <b>Sport</b> (top). It stays set across rallies.<br>
 2. When a rally begins, click <b>Mark START</b> (pause/scrub first for frame accuracy &mdash; it snapshots the current playback time into the Start field).<br>
 3. When the rally ends, click <b>Mark END</b>. You may fine-tune the Start/End seconds by editing those fields directly.<br>
-4. Choose the <b>Ending reason</b> (or leave it as <b>unknown</b>) and click <b>Save Rally</b> &mdash; one CSV row is written next to the video.<br>
+4. Choose the <b>Ending reason</b> (the box between <b>Mark END</b> and <b>Save Rally</b>; or leave it as <b>unknown</b>), then click <b>Save Rally</b> &mdash; one CSV row is written next to the video.<br>
 5. The reason RESETS to <b>unknown</b> after every save (never silently reused), and you can pick the same reason on consecutive rallies.<br>
 6. <b>Recent rallies</b>: select a row, then <b>Edit selected</b> (loads it back into the fields) or <b>Delete selected</b>. <b>Undo last</b> removes the most recent row (the button shows which, e.g. <i>Undo last (#7)</i>), or clears an in-progress mark, or cancels an edit.<br>
-7. <b>Resuming later:</b> labels are saved to the CSV next to the video as you go. Re-open the SAME video and enable the extension &mdash; it reloads your existing rallies and continues numbering. Set the <b>Next rally #</b> field (top right) to resume numbering from any value (e.g. restart at 1, or continue from 50); it auto-advances after each save. If you switch videos with this dialog open, click <b>Refresh</b> to load the current video's rallies. (The video's playback position is not restored &mdash; scrub to where you stopped.)<br>
+7. <b>Resuming later:</b> labels are saved to the CSV next to the video as you go. Re-open the SAME video and enable the extension &mdash; it reloads your existing rallies and continues numbering. Set the <b>Next rally #</b> field to resume numbering from any value (e.g. restart at 1, or continue from 50); it auto-advances after each save. If you switch videos with this dialog open, click <b>Refresh</b> to load the current video's rallies. (The video's playback position is not restored &mdash; scrub to where you stopped.)<br>
 <br>
 <b>Ending reasons &mdash; what they mean (pick the one that says WHY the rally ended).</b><br>
 All reasons except <i>winner</i> are charged to the side that LOST the rally.<br>
@@ -348,7 +348,7 @@ end
 local function rebuild_reason_default()
   if not d then return end
   if w_reason then d:del_widget(w_reason) end
-  w_reason = d:add_dropdown(2, 2, 1, 1)
+  w_reason = d:add_dropdown(3, 4, 1, 1)
   w_reason:add_value(REASON_DEFAULT, 0)            -- "unknown" default (id 0)
   for i, v in ipairs(REASONS) do w_reason:add_value(v, i) end
 end
@@ -357,7 +357,7 @@ local function rebuild_reason_selected(sel)
   if not d then return end
   if not sel or sel == "" then sel = REASON_DEFAULT end
   if w_reason then d:del_widget(w_reason) end
-  w_reason = d:add_dropdown(2, 2, 1, 1)
+  w_reason = d:add_dropdown(3, 4, 1, 1)
   w_reason:add_value(sel, REASON_ID[sel] or 0)     -- selected first
   if sel ~= REASON_DEFAULT then w_reason:add_value(REASON_DEFAULT, 0) end
   for i, v in ipairs(REASONS) do
@@ -636,19 +636,20 @@ local function create_dialog()
   for i, v in ipairs(SPORTS) do w_sport:add_value(v, i) end   -- badminton first => default
   w_help_btn = d:add_button("Help", show_help, 4, 1, 1, 1)
 
-  d:add_label("Ending reason:", 1, 2, 1, 1)
-  rebuild_reason_default()                 -- creates w_reason at (2,2,1,1)
-  d:add_label("Next rally #:", 3, 2, 1, 1)
-  w_next = d:add_text_input("", 4, 2, 1, 1)
+  d:add_label("Start (s):", 1, 2, 1, 1)
+  w_start = d:add_text_input("", 2, 2, 1, 1)
+  d:add_label("End (s):", 3, 2, 1, 1)
+  w_end = d:add_text_input("", 4, 2, 1, 1)
 
-  d:add_label("Start (s):", 1, 3, 1, 1)
-  w_start = d:add_text_input("", 2, 3, 1, 1)
-  d:add_label("End (s):", 3, 3, 1, 1)
-  w_end = d:add_text_input("", 4, 3, 1, 1)
+  d:add_label("Next rally #:", 1, 3, 1, 1)
+  w_next = d:add_text_input("", 2, 3, 1, 1)
+  d:add_label("Ending reason:", 3, 3, 1, 1)   -- labels the reason dropdown directly below it
 
+  -- Per-rally commit row, left-to-right: Mark START -> Mark END -> reason -> Save.
   d:add_button("Mark START", mark_start, 1, 4, 1, 1)
   d:add_button("Mark END",   mark_end,   2, 4, 1, 1)
-  w_save = d:add_button("Save Rally", save_rally, 3, 4, 2, 1)
+  rebuild_reason_default()                     -- creates w_reason at (3,4,1,1), under its label
+  w_save = d:add_button("Save Rally", save_rally, 4, 4, 1, 1)
 
   w_status = d:add_html("", 1, 5, 4, 2)   -- rich-text status panel (multi-line via <br>)
 
