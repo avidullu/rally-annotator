@@ -5,7 +5,13 @@
   of just "Rally Annotator", so a rater can tell at a glance which build they're running. The version is a single
   `VERSION` constant the descriptor and the dialog title both read, so they can't drift.
 - **Test:** added two assertions that the dialog title carries the version and exactly matches `Rally Annotator v` +
-  `descriptor().version` (38 assertions total).
+  `descriptor().version`.
+- **Test: layout snapshot** (`test/dialog_layout.snapshot`). The harness now serializes the full widget grid the
+  extension hands to VLC — every control's kind, grid column/row, column/row span, and caption/options, plus the
+  window title — and diffs it against a committed golden. It's the deterministic, cross-platform stand-in for a
+  screenshot diff (VLC renders extension dialogs through Qt with no headless path), catching any moved, resized,
+  renamed, added, or removed control and any title change. Regenerate intentional layout changes with
+  `lua5.1 test/dialog_test.lua --update`. **39 assertions total.**
 - **Docs:** `test/README.md` gains a **Windows** Lua-5.1 install FAQ (no-admin portable install + the `choco` route),
   since `lua5.1` isn't on PATH by default there.
 
