@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.5.1 — 2026-06-09
+- **UX: the annotation window title now shows the version** — the dialog opens as **"Rally Annotator v1.5.1"** instead
+  of just "Rally Annotator", so a rater can tell at a glance which build they're running. The version is a single
+  `VERSION` constant the descriptor and the dialog title both read, so they can't drift.
+- **Test:** added two assertions that the dialog title carries the version and exactly matches `Rally Annotator v` +
+  `descriptor().version` (38 assertions total).
+- **Docs:** `test/README.md` gains a **Windows** Lua-5.1 install FAQ (no-admin portable install + the `choco` route),
+  since `lua5.1` isn't on PATH by default there.
+
 ## v1.5 — 2026-06-08
 - **Feature: playback controls (issue #4).** A new **Back 5s · Play / Resume · Pause · Fwd 5s** row drives the VLC
   player from the annotation window — pause, label, and resume without switching to the main VLC window. Uses the
