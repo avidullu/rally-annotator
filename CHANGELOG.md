@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.5 — 2026-06-08
+- **Feature: playback controls (issue #4).** A new **Back 5s · Play / Resume · Pause · Fwd 5s** row drives the VLC
+  player from the annotation window — pause, label, and resume without switching to the main VLC window. Uses the
+  extension-exposed `vlc.playlist` (play/pause/status) and `vlc.var` seek on the input; Pause / Play-Resume are
+  **gated on `vlc.playlist.status()`** because VLC's `pause()` is a hard toggle, so they never flip the wrong way.
+  Seek is relative ±5 s, clamped at 0. (Verified feasible against the VLC 3.0 source before building.)
+- **Committed test suite** (`test/dialog_test.lua`, run with `lua5.1`): stubs VLC's dialog + playback API, loads the
+  real extension, and asserts reason reset / consecutive-reason / numbering / undo re-sync / help toggle / playback
+  gating / CSV output — **36 assertions, exit-code-based** for CI. See `test/README.md`.
+- Dialog regrouped to fit the playback row at the top; reason dropdown cell `(3,4)` → `(3,5)`, help panel row `14` → `15`.
+
 ## v1.4 — 2026-06-08
 - **Fix: the Help button now toggles reliably.** It previously got "stuck" showing help — VLC didn't repaint the
   in-place text swap on the shared status widget. Help is now a **dedicated panel** added/removed via

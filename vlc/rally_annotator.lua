@@ -1,4 +1,4 @@
---[[ rally_annotator.lua  --  VLC Lua EXTENSION (v1.4)
+--[[ rally_annotator.lua  --  VLC Lua EXTENSION (v1.5)
 
   Rally Annotator for NET-SEPARATED RACQUET SPORTS
   (badminton · tennis · table tennis · pickleball · padel)
@@ -57,7 +57,7 @@
 function descriptor()
   return {
     title       = "Rally Annotator",
-    version     = "1.4",
+    version     = "1.5",
     author      = "Avi Dullu",
     url         = "https://github.com/avidullu/rally-annotator",
     shortdesc   = "Mark rally start/end + a point-ending reason to a CSV (net-separated racquet sports)",
@@ -66,8 +66,9 @@ function descriptor()
      .. "(unknown / winner / forced_error / unforced_error / service_fault / let / other), and append "
      .. "one CSV row per rally next to the video "
      .. "(rally_number,start_time,end_time,ending_reason,sport; decimal seconds). "
-     .. "Two-step Save (Mark END, then Save Rally) with a REQUIRED, non-sticky reason; "
-     .. "editable times; edit or delete recent rallies. "
+     .. "Built-in Play/Resume/Pause + seek so you never leave the window; "
+     .. "two-step Save (Mark END, then Save Rally) with a non-sticky reason (defaults to unknown); "
+     .. "editable times; edit or delete recent rallies; resumable numbering. "
      .. "For badminton/tennis/table-tennis/pickleball/padel. "
      .. "Click the HELP button inside the dialog for usage + an ending-reason decision guide.",
     capabilities = {}   -- button-click model: no listeners needed
@@ -100,6 +101,7 @@ local SPORT_ID = {}
 -- only (<b>, <i>, <br>) for portability across the Qt and macOS dialog renderers.
 local HELP_HTML = [==[
 <b>Rally Annotator &mdash; how to use</b><br>
+<b>Playback:</b> the <b>Back 5s / Play / Resume / Pause / Fwd 5s</b> row drives the VLC player from here &mdash; pause, annotate, and resume without switching to the main VLC window.<br>
 1. Pick the <b>Sport</b> (top). It stays set across rallies.<br>
 2. When a rally begins, click <b>Mark START</b> (pause/scrub first for frame accuracy &mdash; it snapshots the current playback time into the Start field).<br>
 3. When the rally ends, click <b>Mark END</b>. You may fine-tune the Start/End seconds by editing those fields directly.<br>
@@ -348,7 +350,7 @@ end
 local function rebuild_reason_default()
   if not d then return end
   if w_reason then d:del_widget(w_reason) end
-  w_reason = d:add_dropdown(3, 4, 1, 1)
+  w_reason = d:add_dropdown(3, 5, 1, 1)
   w_reason:add_value(REASON_DEFAULT, 0)            -- "unknown" default (id 0)
   for i, v in ipairs(REASONS) do w_reason:add_value(v, i) end
 end
@@ -357,7 +359,7 @@ local function rebuild_reason_selected(sel)
   if not d then return end
   if not sel or sel == "" then sel = REASON_DEFAULT end
   if w_reason then d:del_widget(w_reason) end
-  w_reason = d:add_dropdown(3, 4, 1, 1)
+  w_reason = d:add_dropdown(3, 5, 1, 1)
   w_reason:add_value(sel, REASON_ID[sel] or 0)     -- selected first
   if sel ~= REASON_DEFAULT then w_reason:add_value(REASON_DEFAULT, 0) end
   for i, v in ipairs(REASONS) do
@@ -494,6 +496,18 @@ local function sync_to_current_video()
     "Switched to the current video. Loaded %d existing rallies; next is #%d.", #rows, next_rally_number()))
 end
 
+-- Seek the player by delta_s seconds (relative), clamped at 0 (time is microseconds in 3.x).
+local function seek_by(delta_s)
+  local input = vlc.object.input()
+  if not input then set_status("No media playing -- cannot seek."); return end
+  local t = vlc.var.get(input, "time")   -- microseconds
+  if not t then set_status("No playback time available to seek from."); return end
+  local nt = t + delta_s * 1000000
+  if nt < 0 then nt = 0 end
+  vlc.var.set(input, "time", nt)
+  set_status(string.format("Seek %+ds  ->  %s.", delta_s, fmt_clock(nt / 1000000.0)))
+end
+
 --------------------------------------------------------------------------------
 -- Button callbacks (VLC calls these on its main loop; kept global to be safe)
 --------------------------------------------------------------------------------
@@ -610,6 +624,33 @@ function refresh_now()
   sync_to_current_video()
 end
 
+-- Playback control (verified available to VLC 3.x extensions). pause() is a TOGGLE
+-- (playlist_TogglePause), so we gate on status() to keep Pause and Resume deterministic.
+function play_resume()
+  local st = vlc.playlist.status()
+  if st == "paused" then
+    vlc.playlist.pause()        -- toggles paused -> playing
+    set_status("Resumed playback.")
+  elseif st == "stopped" then
+    vlc.playlist.play()
+    set_status("Started playback.")
+  else
+    set_status("Already playing.")
+  end
+end
+
+function pause_playback()
+  if vlc.playlist.status() == "playing" then
+    vlc.playlist.pause()        -- toggles playing -> paused
+    set_status("Paused. Annotate (or fine-tune Start/End), then Play / Resume.")
+  else
+    set_status("Nothing is playing to pause.")
+  end
+end
+
+function seek_back() seek_by(-5) end
+function seek_fwd()  seek_by(5) end
+
 function show_help()
   -- Toggle a DEDICATED help panel by adding/removing a widget. In-place set_text on
   -- the shared status widget did not repaint reliably in VLC (the panel got "stuck");
@@ -619,7 +660,7 @@ function show_help()
     w_help = nil
     if w_help_btn then w_help_btn:set_text("Help") end
   else
-    if d then w_help = d:add_html(HELP_HTML, 1, 14, 4, 8) end
+    if d then w_help = d:add_html(HELP_HTML, 1, 15, 4, 8) end
     if w_help_btn then w_help_btn:set_text("Hide help") end
   end
   if d then d:update() end
@@ -636,30 +677,36 @@ local function create_dialog()
   for i, v in ipairs(SPORTS) do w_sport:add_value(v, i) end   -- badminton first => default
   w_help_btn = d:add_button("Help", show_help, 4, 1, 1, 1)
 
-  d:add_label("Start (s):", 1, 2, 1, 1)
-  w_start = d:add_text_input("", 2, 2, 1, 1)
-  d:add_label("End (s):", 3, 2, 1, 1)
-  w_end = d:add_text_input("", 4, 2, 1, 1)
+  -- Playback controls -- drive the VLC player without leaving this window.
+  d:add_button("Back 5s",       seek_back,      1, 2, 1, 1)
+  d:add_button("Play / Resume", play_resume,    2, 2, 1, 1)
+  d:add_button("Pause",         pause_playback, 3, 2, 1, 1)
+  d:add_button("Fwd 5s",        seek_fwd,       4, 2, 1, 1)
 
-  d:add_label("Next rally #:", 1, 3, 1, 1)
-  w_next = d:add_text_input("", 2, 3, 1, 1)
-  d:add_label("Ending reason:", 3, 3, 1, 1)   -- labels the reason dropdown directly below it
+  d:add_label("Start (s):", 1, 3, 1, 1)
+  w_start = d:add_text_input("", 2, 3, 1, 1)
+  d:add_label("End (s):", 3, 3, 1, 1)
+  w_end = d:add_text_input("", 4, 3, 1, 1)
+
+  d:add_label("Next rally #:", 1, 4, 1, 1)
+  w_next = d:add_text_input("", 2, 4, 1, 1)
+  d:add_label("Ending reason:", 3, 4, 1, 1)   -- labels the reason dropdown directly below it
 
   -- Per-rally commit row, left-to-right: Mark START -> Mark END -> reason -> Save.
-  d:add_button("Mark START", mark_start, 1, 4, 1, 1)
-  d:add_button("Mark END",   mark_end,   2, 4, 1, 1)
-  rebuild_reason_default()                     -- creates w_reason at (3,4,1,1), under its label
-  w_save = d:add_button("Save Rally", save_rally, 4, 4, 1, 1)
+  d:add_button("Mark START", mark_start, 1, 5, 1, 1)
+  d:add_button("Mark END",   mark_end,   2, 5, 1, 1)
+  rebuild_reason_default()                     -- creates w_reason at (3,5,1,1), under its label
+  w_save = d:add_button("Save Rally", save_rally, 4, 5, 1, 1)
 
-  w_status = d:add_html("", 1, 5, 4, 2)   -- rich-text status panel (multi-line via <br>)
+  w_status = d:add_html("", 1, 6, 4, 2)   -- rich-text status panel (multi-line via <br>)
 
-  d:add_label("Recent rallies (select one, then Edit/Delete):", 1, 7, 4, 1)
-  w_list = d:add_list(1, 8, 4, 4)
+  d:add_label("Recent rallies (select one, then Edit/Delete):", 1, 8, 4, 1)
+  w_list = d:add_list(1, 9, 4, 4)
 
-  d:add_button("Edit selected",   edit_selected,   1, 12, 1, 1)
-  d:add_button("Delete selected", delete_selected, 2, 12, 1, 1)
-  w_undo = d:add_button("Undo last", undo_last,     3, 12, 1, 1)
-  d:add_button("Refresh",         refresh_now,     4, 12, 1, 1)
+  d:add_button("Edit selected",   edit_selected,   1, 13, 1, 1)
+  d:add_button("Delete selected", delete_selected, 2, 13, 1, 1)
+  w_undo = d:add_button("Undo last", undo_last,     3, 13, 1, 1)
+  d:add_button("Refresh",         refresh_now,     4, 13, 1, 1)
 
   refresh_next_field()
   refresh_list()

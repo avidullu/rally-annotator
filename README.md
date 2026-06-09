@@ -32,12 +32,17 @@ pausing to the exact frame before each mark — turning "watch a match" into "pr
 Requires **VLC 3.0.x**. (VLC 4.0 changed the Lua input/listener API; targeting 3.x for now.)
 
 ## Use
+**Playback is built in** — the **Back 5s · Play / Resume · Pause · Fwd 5s** row drives the VLC player from the
+annotation window, so you can pause, label, and resume without ever switching to the main VLC window.
+
 1. Pick the **Sport** (it stays set across rallies).
 2. When a rally begins, click **Mark START** — it snapshots the current playback time into the **Start** field
    (pause/scrub first for frame accuracy; you can also edit the field by hand).
 3. When the rally ends, click **Mark END** (fills the **End** field). This *arms* the rally; nothing is written yet.
-4. Choose the **Ending reason** — it is **required** — and click **Save Rally** to write one CSV row.
-   The reason **resets after every save**, so it can't silently reuse the previous rally's reason.
+4. Choose the **Ending reason** (sits between **Mark END** and **Save Rally**; defaults to **`unknown`**), then click
+   **Save Rally** to write one CSV row. The reason **resets to `unknown` after every save** — so it never silently
+   reuses the previous rally's reason, and you can pick the same reason on consecutive rallies. Use the
+   **Next rally #** field to resume/insert numbering anywhere.
 5. **Recent rallies** list: select a row, then **Edit selected** (loads it back into the fields to fix
    start/end/reason/sport → **Save changes**) or **Delete selected**. **Undo last** removes the most recent row —
    the button shows which one, e.g. `Undo last (#7)`, and the status panel shows that row's details — or clears an
@@ -93,16 +98,29 @@ forced-vs-unforced, **default to `unforced_error`**. See the full decision guide
 in **[docs/ENDING_REASONS.md](docs/ENDING_REASONS.md)** (also available via the in-plugin **Help** button).
 
 ## Roadmap
-- [ ] Live-test the v1.3 dialog in VLC (two-step Save, required/non-sticky reason, editable times, Recent-rallies
-      Edit/Delete) across all five sports.
+- [ ] Live-test the v1.5 dialog in VLC (playback controls, two-step Save, `unknown`-default reason, editable times,
+      Next rally #, Recent-rallies Edit/Delete) across all five sports.
 - [ ] Optional per-sport reason presets / hotkeys.
 - [ ] Alternative front-ends for power users / remote raters: a `python-vlc` + Tk/Qt app with global keyboard
       shortcuts (S/E/1–6/U), and a zero-install HTML5 `<video>` page that exports the same CSV.
 - [ ] Optional extra columns (e.g. `shots_count`, server/receiver) behind a toggle.
 
+## Tests
+The dialog logic has a headless test suite that stubs VLC's `vlc` API (widgets + playback), loads the real
+extension, drives its callbacks, and asserts the results — run with **Lua 5.1** (the interpreter VLC 3.x embeds):
+
+```bash
+lua5.1 test/dialog_test.lua        # exit 0 = pass; covers reason reset, numbering, undo, help toggle, playback gating
+```
+
+It covers all the logic but not VLC's GUI rendering or real playback (there's no headless VLC UI automation) — those
+are checked by loading in VLC with `vlc -vv --file-logging` (must scan with no `Error loading` line) plus a manual
+click-through. See [test/README.md](test/README.md).
+
 ## Contributing
 Issues and PRs welcome — especially live test reports per sport/OS and small UX fixes. The plugin is a single
-self-contained Lua file (`vlc/rally_annotator.lua`) using only documented VLC 3.x Lua APIs.
+self-contained Lua file (`vlc/rally_annotator.lua`) using only documented VLC 3.x Lua APIs; please keep
+`test/dialog_test.lua` green (`lua5.1 test/dialog_test.lua`) and add a case for new dialog logic.
 
 ## License
 MIT — see [LICENSE](LICENSE).
