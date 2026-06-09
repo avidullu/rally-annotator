@@ -90,10 +90,14 @@ local function ok(name, cond) eq(name, cond and true or false, true) end
 --------------------------------------------------------------------------------
 dofile(EXT)
 ok("descriptor() returns a title", descriptor().title ~= nil)
-eq("descriptor version", descriptor().version, "1.5")
+eq("descriptor version", descriptor().version, "1.5.1")
 activate()
 local d = DIALOG
 ok("dialog was created", d ~= nil)
+
+-- the window title carries the version, and stays in sync with the descriptor (no drift)
+ok("dialog title shows version", d.title:find("v" .. descriptor().version, 1, true) ~= nil)
+eq("dialog title is exactly Name + version", d.title, "Rally Annotator v" .. descriptor().version)
 
 -- live (non-deleted) widget by grid position; reason dropdown is recreated on reset
 local function find(kind, col, row)
