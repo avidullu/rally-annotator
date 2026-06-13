@@ -1,4 +1,4 @@
---[[ rally_annotator.lua  --  VLC Lua EXTENSION (v1.5.1)
+--[[ rally_annotator.lua  --  VLC Lua EXTENSION (v1.6)
 
   Rally Annotator for NET-SEPARATED RACQUET SPORTS
   (badminton · tennis · table tennis · pickleball · padel)
@@ -9,7 +9,13 @@
   directly into common rally-segmentation tooling.
 
   Output CSV columns (times in decimal SECONDS):
-      rally_number,start_time,end_time,ending_reason,sport
+      rally_number,start_time,end_time,ending_reason,sport,shots_count
+
+  WHAT'S NEW IN v1.6
+    - Playback is now a single PLAY / PAUSE toggle (was separate Play/Resume +
+      Pause), so the playback row is just Back 5s / Play / Pause / Fwd 5s.
+    - New optional "Number of shots" field -> a shots_count column appended to
+      the CSV (blank when you don't fill it; older CSVs still load fine).
 
   WHAT'S NEW IN v1.3
     - In-dialog HELP button: usage + an ending-reason decision guide, rendered
@@ -54,7 +60,7 @@
 --------------------------------------------------------------------------------
 -- Extension registration
 --------------------------------------------------------------------------------
-local VERSION = "1.5.1"
+local VERSION = "1.6"
 
 function descriptor()
   return {
@@ -67,8 +73,8 @@ function descriptor()
         "Mark each rally's START and END while you watch, tag WHY the point ended "
      .. "(unknown / winner / forced_error / unforced_error / service_fault / let / other), and append "
      .. "one CSV row per rally next to the video "
-     .. "(rally_number,start_time,end_time,ending_reason,sport; decimal seconds). "
-     .. "Built-in Play/Resume/Pause + seek so you never leave the window; "
+     .. "(rally_number,start_time,end_time,ending_reason,sport,shots_count; decimal seconds). "
+     .. "Built-in Play/Pause + seek so you never leave the window; "
      .. "two-step Save (Mark END, then Save Rally) with a non-sticky reason (defaults to unknown); "
      .. "editable times; edit or delete recent rallies; resumable numbering. "
      .. "For badminton/tennis/table-tennis/pickleball/padel. "
@@ -90,7 +96,7 @@ local REASONS = {
 local SPORTS = {
   "badminton", "tennis", "table_tennis", "pickleball", "padel"
 }
-local HEADER = "rally_number,start_time,end_time,ending_reason,sport\n"
+local HEADER = "rally_number,start_time,end_time,ending_reason,sport,shots_count\n"
 
 -- reason/sport -> id lookups. POPULATED IN activate(), NOT here: VLC scans an
 -- extension's descriptor() in a restricted Lua sandbox that lacks base globals
@@ -103,11 +109,11 @@ local SPORT_ID = {}
 -- only (<b>, <i>, <br>) for portability across the Qt and macOS dialog renderers.
 local HELP_HTML = [==[
 <b>Rally Annotator &mdash; how to use</b><br>
-<b>Playback:</b> the <b>Back 5s / Play / Resume / Pause / Fwd 5s</b> row drives the VLC player from here &mdash; pause, annotate, and resume without switching to the main VLC window.<br>
+<b>Playback:</b> the <b>Back 5s / Play / Pause / Fwd 5s</b> row drives the VLC player from here &mdash; <b>Play / Pause</b> is one toggle (pause, annotate, and resume without switching to the main VLC window).<br>
 1. Pick the <b>Sport</b> (top). It stays set across rallies.<br>
 2. When a rally begins, click <b>Mark START</b> (pause/scrub first for frame accuracy &mdash; it snapshots the current playback time into the Start field).<br>
 3. When the rally ends, click <b>Mark END</b>. You may fine-tune the Start/End seconds by editing those fields directly.<br>
-4. Choose the <b>Ending reason</b> (the box between <b>Mark END</b> and <b>Save Rally</b>; or leave it as <b>unknown</b>), then click <b>Save Rally</b> &mdash; one CSV row is written next to the video.<br>
+4. Choose the <b>Ending reason</b> (the box between <b>Mark END</b> and <b>Save Rally</b>; or leave it as <b>unknown</b>), optionally type a <b>Number of shots</b> (the rally's shot/stroke count &mdash; leave blank to skip), then click <b>Save Rally</b> &mdash; one CSV row is written next to the video.<br>
 5. The reason RESETS to <b>unknown</b> after every save (never silently reused), and you can pick the same reason on consecutive rallies.<br>
 6. <b>Recent rallies</b>: select a row, then <b>Edit selected</b> (loads it back into the fields) or <b>Delete selected</b>. <b>Undo last</b> removes the most recent row (the button shows which, e.g. <i>Undo last (#7)</i>), or clears an in-progress mark, or cancels an edit.<br>
 7. <b>Resuming later:</b> labels are saved to the CSV next to the video as you go. Re-open the SAME video and enable the extension &mdash; it reloads your existing rallies and continues numbering. Set the <b>Next rally #</b> field to resume numbering from any value (e.g. restart at 1, or continue from 50); it auto-advances after each save. If you switch videos with this dialog open, click <b>Refresh</b> to load the current video's rallies. (The video's playback position is not restored &mdash; scrub to where you stopped.)<br>
@@ -145,10 +151,11 @@ local w_list            -- recent-rallies list widget
 local w_save            -- "Save Rally" / "Save changes" button (relabeled by state)
 local w_undo            -- "Undo last" button (relabeled to show which row it removes)
 local w_next            -- "Next rally #" text input (lets you resume numbering anywhere)
+local w_shots           -- "Number of shots" text input (optional shots_count per rally)
 local w_help_btn        -- the Help button (relabeled "Hide help" when open)
 local w_help            -- the help panel widget; nil when hidden (toggled via del_widget)
 
-local rows = {}         -- in-memory rally rows: { n, s, e, reason, sport, [extra] }
+local rows = {}         -- in-memory rally rows: { n, s, e, reason, sport, [shots], [extra] }
 local mode = "new"      -- "new" (marking a fresh rally) or "edit" (editing a row)
 local edit_index = nil  -- index into rows when mode == "edit"
 local out_path          -- resolved CSV path (set on activate; re-resolved by Refresh)
@@ -227,7 +234,8 @@ local function resolve_out_path()
 end
 
 -- Load all rally rows from the CSV into `rows` (header + blank lines skipped).
--- Forgiving parser: any leading-integer line is a rally row; extra columns are
+-- Forgiving parser: any leading-integer line is a rally row. Column 6 is the
+-- optional shots_count (blank/missing in older CSVs); any columns beyond it are
 -- preserved verbatim so we never drop richer metadata on rewrite.
 local function load_rows()
   rows = {}
@@ -240,16 +248,19 @@ local function load_rows()
       for field in (line .. ","):gmatch("([^,]*),") do parts[#parts + 1] = field end
       local n = tonumber(parts[1])
       if n and n == math.floor(n) then
+        local shots = parts[6]
+        if shots == "" then shots = nil end   -- blank => not recorded
         local row = {
           n      = math.floor(n),
           s      = tonumber(parts[2]) or 0,
           e      = tonumber(parts[3]) or 0,
           reason = (parts[4] ~= nil and parts[4] ~= "") and parts[4] or "other",
           sport  = parts[5] or "",
+          shots  = shots,
         }
-        if #parts > 5 then
+        if #parts > 6 then
           local ex = {}
-          for i = 6, #parts do ex[#ex + 1] = parts[i] end
+          for i = 7, #parts do ex[#ex + 1] = parts[i] end
           row.extra = table.concat(ex, ",")
         end
         rows[#rows + 1] = row
@@ -269,7 +280,8 @@ local function save_all()
   if not f then return false, ("cannot open CSV for write: " .. tostring(err)) end
   f:write(HEADER)
   for _, r in ipairs(rows) do
-    local line = string.format("%d,%.3f,%.3f,%s,%s", r.n, r.s, r.e, r.reason, r.sport)
+    local shots = (r.shots ~= nil) and tostring(r.shots) or ""
+    local line = string.format("%d,%.3f,%.3f,%s,%s,%s", r.n, r.s, r.e, r.reason, r.sport, shots)
     if r.extra and r.extra ~= "" then line = line .. "," .. r.extra end
     f:write(line .. "\n")
   end
@@ -304,6 +316,14 @@ local function get_field_num(w)
   t = t:gsub("%s+", "")
   if t == "" then return nil end
   return tonumber(t)
+end
+
+-- The "Number of shots" field as a non-negative integer, or nil if blank or not a
+-- valid count. Optional metadata: a blank/garbage value just records no shots_count.
+local function get_shots()
+  local v = get_field_num(w_shots)
+  if not v or v < 0 then return nil end
+  return math.floor(v)
 end
 
 -- The number the NEXT new rally will get. Defaults to next_rally_number(), but the
@@ -352,7 +372,7 @@ end
 local function rebuild_reason_default()
   if not d then return end
   if w_reason then d:del_widget(w_reason) end
-  w_reason = d:add_dropdown(3, 5, 1, 1)
+  w_reason = d:add_dropdown(3, 6, 1, 1)
   w_reason:add_value(REASON_DEFAULT, 0)            -- "unknown" default (id 0)
   for i, v in ipairs(REASONS) do w_reason:add_value(v, i) end
 end
@@ -361,7 +381,7 @@ local function rebuild_reason_selected(sel)
   if not d then return end
   if not sel or sel == "" then sel = REASON_DEFAULT end
   if w_reason then d:del_widget(w_reason) end
-  w_reason = d:add_dropdown(3, 5, 1, 1)
+  w_reason = d:add_dropdown(3, 6, 1, 1)
   w_reason:add_value(sel, REASON_ID[sel] or 0)     -- selected first
   if sel ~= REASON_DEFAULT then w_reason:add_value(REASON_DEFAULT, 0) end
   for i, v in ipairs(REASONS) do
@@ -389,9 +409,9 @@ local function refresh_list()
   if starti < 1 then starti = 1 end
   for i = starti, total do
     local r = rows[i]
-    w_list:add_value(
-      string.format("#%d   %s -> %s   [%s, %s]", r.n, fmt_clock(r.s), fmt_clock(r.e), r.reason, r.sport),
-      r.n)
+    local label = string.format("#%d   %s -> %s   [%s, %s]", r.n, fmt_clock(r.s), fmt_clock(r.e), r.reason, r.sport)
+    if r.shots ~= nil then label = label .. string.format("   %s shots", tostring(r.shots)) end
+    w_list:add_value(label, r.n)
   end
   if d then d:update() end
 end
@@ -458,6 +478,7 @@ local function reset_form()
   edit_index = nil
   if w_start then w_start:set_text("") end
   if w_end then w_end:set_text("") end
+  if w_shots then w_shots:set_text("") end
   rebuild_reason_default()
   refresh_buttons()
   if d then d:update() end
@@ -543,25 +564,27 @@ function save_rally()
   if not reason or reason == "" then reason = REASON_DEFAULT end
   local _, sport = w_sport:get_value()
   if not sport or sport == "" then sport = SPORTS[1] end
+  local shots = get_shots()                -- optional; nil when blank
+  local shots_note = (shots ~= nil) and string.format(", %d shots", shots) or ""
 
   local msg
   if mode == "edit" and edit_index and rows[edit_index] then
     local r = rows[edit_index]
-    r.s, r.e, r.reason, r.sport = s, e, reason, sport
+    r.s, r.e, r.reason, r.sport, r.shots = s, e, reason, sport, shots
     local ok, err = save_all()
     if not ok then set_status("WRITE FAILED: " .. tostring(err)); return end
-    msg = string.format("Updated rally #%d: %s -> %s  [%s, %s].", r.n, fmt_clock(s), fmt_clock(e), reason, sport)
+    msg = string.format("Updated rally #%d: %s -> %s  [%s, %s%s].", r.n, fmt_clock(s), fmt_clock(e), reason, sport, shots_note)
   else
     local n = planned_next_number()
     if index_of_rally(n) then
       set_status(string.format("Rally #%d already exists -- set \"Next rally #\" to a free number.", n))
       return
     end
-    rows[#rows + 1] = { n = n, s = s, e = e, reason = reason, sport = sport }
+    rows[#rows + 1] = { n = n, s = s, e = e, reason = reason, sport = sport, shots = shots }
     local ok, err = save_all()
     if not ok then rows[#rows] = nil; set_status("WRITE FAILED: " .. tostring(err)); return end
     if w_next then w_next:set_text(tostring(next_free_from(n + 1))) end   -- next free number
-    msg = string.format("Saved rally #%d: %s -> %s  [%s, %s].", n, fmt_clock(s), fmt_clock(e), reason, sport)
+    msg = string.format("Saved rally #%d: %s -> %s  [%s, %s%s].", n, fmt_clock(s), fmt_clock(e), reason, sport, shots_note)
   end
 
   reset_form()       -- clears fields + resets the (required) reason to placeholder
@@ -578,6 +601,7 @@ function edit_selected()
   mode = "edit"; edit_index = idx
   w_start:set_text(string.format("%.3f", r.s))
   w_end:set_text(string.format("%.3f", r.e))
+  if w_shots then w_shots:set_text(r.shots ~= nil and tostring(r.shots) or "") end
   rebuild_reason_selected(r.reason)
   rebuild_sport_selected(r.sport)
   refresh_buttons()
@@ -627,26 +651,21 @@ function refresh_now()
 end
 
 -- Playback control (verified available to VLC 3.x extensions). pause() is a TOGGLE
--- (playlist_TogglePause), so we gate on status() to keep Pause and Resume deterministic.
-function play_resume()
+-- (playlist_TogglePause), so we branch on status() to keep one Play / Pause button
+-- deterministic: pause() flips playing<->paused, and from stopped we play() fresh.
+function play_pause()
   local st = vlc.playlist.status()
-  if st == "paused" then
+  if st == "playing" then
+    vlc.playlist.pause()        -- toggles playing -> paused
+    set_status("Paused. Annotate (or fine-tune Start/End), then Play / Pause to resume.")
+  elseif st == "paused" then
     vlc.playlist.pause()        -- toggles paused -> playing
     set_status("Resumed playback.")
   elseif st == "stopped" then
     vlc.playlist.play()
     set_status("Started playback.")
   else
-    set_status("Already playing.")
-  end
-end
-
-function pause_playback()
-  if vlc.playlist.status() == "playing" then
-    vlc.playlist.pause()        -- toggles playing -> paused
-    set_status("Paused. Annotate (or fine-tune Start/End), then Play / Resume.")
-  else
-    set_status("Nothing is playing to pause.")
+    set_status("No media loaded to play.")
   end
 end
 
@@ -662,7 +681,7 @@ function show_help()
     w_help = nil
     if w_help_btn then w_help_btn:set_text("Help") end
   else
-    if d then w_help = d:add_html(HELP_HTML, 1, 15, 4, 8) end
+    if d then w_help = d:add_html(HELP_HTML, 1, 16, 4, 8) end
     if w_help_btn then w_help_btn:set_text("Hide help") end
   end
   if d then d:update() end
@@ -679,11 +698,10 @@ local function create_dialog()
   for i, v in ipairs(SPORTS) do w_sport:add_value(v, i) end   -- badminton first => default
   w_help_btn = d:add_button("Help", show_help, 4, 1, 1, 1)
 
-  -- Playback controls -- drive the VLC player without leaving this window.
-  d:add_button("Back 5s",       seek_back,      1, 2, 1, 1)
-  d:add_button("Play / Resume", play_resume,    2, 2, 1, 1)
-  d:add_button("Pause",         pause_playback, 3, 2, 1, 1)
-  d:add_button("Fwd 5s",        seek_fwd,       4, 2, 1, 1)
+  -- Playback controls -- one row of 3: Back 5s | Play / Pause (toggle) | Fwd 5s.
+  d:add_button("Back 5s",      seek_back,  1, 2, 1, 1)
+  d:add_button("Play / Pause", play_pause, 2, 2, 2, 1)   -- spans cols 2-3, centered
+  d:add_button("Fwd 5s",       seek_fwd,   4, 2, 1, 1)
 
   d:add_label("Start (s):", 1, 3, 1, 1)
   w_start = d:add_text_input("", 2, 3, 1, 1)
@@ -692,23 +710,26 @@ local function create_dialog()
 
   d:add_label("Next rally #:", 1, 4, 1, 1)
   w_next = d:add_text_input("", 2, 4, 1, 1)
-  d:add_label("Ending reason:", 3, 4, 1, 1)   -- labels the reason dropdown directly below it
+  d:add_label("Number of shots:", 3, 4, 1, 1)   -- optional; blank => shots_count left empty
+  w_shots = d:add_text_input("", 4, 4, 1, 1)
+
+  d:add_label("Ending reason:", 3, 5, 1, 1)   -- labels the reason dropdown directly below it
 
   -- Per-rally commit row, left-to-right: Mark START -> Mark END -> reason -> Save.
-  d:add_button("Mark START", mark_start, 1, 5, 1, 1)
-  d:add_button("Mark END",   mark_end,   2, 5, 1, 1)
-  rebuild_reason_default()                     -- creates w_reason at (3,5,1,1), under its label
-  w_save = d:add_button("Save Rally", save_rally, 4, 5, 1, 1)
+  d:add_button("Mark START", mark_start, 1, 6, 1, 1)
+  d:add_button("Mark END",   mark_end,   2, 6, 1, 1)
+  rebuild_reason_default()                     -- creates w_reason at (3,6,1,1), under its label
+  w_save = d:add_button("Save Rally", save_rally, 4, 6, 1, 1)
 
-  w_status = d:add_html("", 1, 6, 4, 2)   -- rich-text status panel (multi-line via <br>)
+  w_status = d:add_html("", 1, 7, 4, 2)   -- rich-text status panel (multi-line via <br>)
 
-  d:add_label("Recent rallies (select one, then Edit/Delete):", 1, 8, 4, 1)
-  w_list = d:add_list(1, 9, 4, 4)
+  d:add_label("Recent rallies (select one, then Edit/Delete):", 1, 9, 4, 1)
+  w_list = d:add_list(1, 10, 4, 4)
 
-  d:add_button("Edit selected",   edit_selected,   1, 13, 1, 1)
-  d:add_button("Delete selected", delete_selected, 2, 13, 1, 1)
-  w_undo = d:add_button("Undo last", undo_last,     3, 13, 1, 1)
-  d:add_button("Refresh",         refresh_now,     4, 13, 1, 1)
+  d:add_button("Edit selected",   edit_selected,   1, 14, 1, 1)
+  d:add_button("Delete selected", delete_selected, 2, 14, 1, 1)
+  w_undo = d:add_button("Undo last", undo_last,     3, 14, 1, 1)
+  d:add_button("Refresh",         refresh_now,     4, 14, 1, 1)
 
   refresh_next_field()
   refresh_list()

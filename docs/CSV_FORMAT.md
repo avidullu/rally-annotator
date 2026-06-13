@@ -3,10 +3,10 @@
 One row per rally. Header is written once when the file is created.
 
 ```
-rally_number,start_time,end_time,ending_reason,sport
-1,8.800,11.500,winner,badminton
-2,24.389,46.589,unforced_error,badminton
-3,49.183,54.683,let,badminton
+rally_number,start_time,end_time,ending_reason,sport,shots_count
+1,8.800,11.500,winner,badminton,9
+2,24.389,46.589,unforced_error,badminton,21
+3,49.183,54.683,let,badminton,
 ```
 
 | Column | Type | Notes |
@@ -16,6 +16,7 @@ rally_number,start_time,end_time,ending_reason,sport
 | `end_time` | float | rally end, decimal seconds (always `> start_time`) |
 | `ending_reason` | enum | `unknown` (default) / `winner` / `forced_error` / `unforced_error` / `service_fault` / `let` / `other` — see the decision guide in [ENDING_REASONS.md](ENDING_REASONS.md) |
 | `sport` | enum | `badminton` / `tennis` / `table_tennis` / `pickleball` / `padel` |
+| `shots_count` | int | **optional** — number of shots/strokes in the rally. **Blank** when not entered (as in row 3 above); added in v1.6. Older CSVs without this column still load. |
 
 Notes:
 - **Decimal seconds**, not `mm:ss` — downstream loaders parse floats.

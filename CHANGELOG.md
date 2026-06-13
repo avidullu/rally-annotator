@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.6 — 2026-06-13
+- **Single Play / Pause toggle.** The separate **Play / Resume** and **Pause** buttons are merged into one
+  **Play / Pause** button, so the playback row is now just **Back 5s · Play / Pause · Fwd 5s** (3 buttons). The
+  toggle branches on `vlc.playlist.status()` — pause→resume, play→pause, and a fresh `play()` from stopped — so it
+  never flips the wrong way (VLC's `pause()` is a hard toggle).
+- **Feature: optional "Number of shots" field → new `shots_count` CSV column.** Type a rally's shot/stroke count
+  before **Save Rally** (leave blank to skip); it's appended as a 6th column
+  (`rally_number,start_time,end_time,ending_reason,sport,shots_count`). The field clears after each save (non-sticky,
+  like the reason), **Edit selected** reloads the saved count, and the Recent-rallies list shows it. Older 5-column
+  CSVs still load (the column reads blank); readers that go by column name are unaffected.
+- Dialog regrouped for the new field: **Number of shots** sits next to **Next rally #**; the reason label/dropdown
+  and the Mark/Save action row shift down one row. The layout-snapshot golden (`test/dialog_layout.snapshot`) is
+  regenerated for the new grid, and the suite grows to **45 assertions** (shots write/blank/edit, Play/Pause toggle),
+  green via `lua5.1 test/dialog_test.lua`.
+
 ## v1.5.1 — 2026-06-09
 - **UX: the annotation window title now shows the version** — the dialog opens as **"Rally Annotator v1.5.1"** instead
   of just "Rally Annotator", so a rater can tell at a glance which build they're running. The version is a single

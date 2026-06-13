@@ -1,26 +1,27 @@
-title :: Rally Annotator v1.5.1
+title :: Rally Annotator v1.6
  1. label      @(1,1) 1x1 :: Sport:
  2. dropdown   @(2,1) 2x1 :: [badminton, tennis, table_tennis, pickleball, padel]
  3. button     @(4,1) 1x1 :: Help
  4. button     @(1,2) 1x1 :: Back 5s
- 5. button     @(2,2) 1x1 :: Play / Resume
- 6. button     @(3,2) 1x1 :: Pause
- 7. button     @(4,2) 1x1 :: Fwd 5s
- 8. label      @(1,3) 1x1 :: Start (s):
- 9. text_input @(2,3) 1x1 :: ""
-10. label      @(3,3) 1x1 :: End (s):
-11. text_input @(4,3) 1x1 :: ""
-12. label      @(1,4) 1x1 :: Next rally #:
-13. text_input @(2,4) 1x1 :: "1"
-14. label      @(3,4) 1x1 :: Ending reason:
-15. button     @(1,5) 1x1 :: Mark START
-16. button     @(2,5) 1x1 :: Mark END
-17. dropdown   @(3,5) 1x1 :: [unknown, winner, forced_error, unforced_error, service_fault, let, other]
-18. button     @(4,5) 1x1 :: Save Rally
-19. html       @(1,6) 4x2 :: <runtime html>
-20. label      @(1,8) 4x1 :: Recent rallies (select one, then Edit/Delete):
-21. list       @(1,9) 4x4 :: <list>
-22. button     @(1,13) 1x1 :: Edit selected
-23. button     @(2,13) 1x1 :: Delete selected
-24. button     @(3,13) 1x1 :: Undo last
-25. button     @(4,13) 1x1 :: Refresh
+ 5. button     @(2,2) 2x1 :: Play / Pause
+ 6. button     @(4,2) 1x1 :: Fwd 5s
+ 7. label      @(1,3) 1x1 :: Start (s):
+ 8. text_input @(2,3) 1x1 :: ""
+ 9. label      @(3,3) 1x1 :: End (s):
+10. text_input @(4,3) 1x1 :: ""
+11. label      @(1,4) 1x1 :: Next rally #:
+12. text_input @(2,4) 1x1 :: "1"
+13. label      @(3,4) 1x1 :: Number of shots:
+14. text_input @(4,4) 1x1 :: ""
+15. label      @(3,5) 1x1 :: Ending reason:
+16. button     @(1,6) 1x1 :: Mark START
+17. button     @(2,6) 1x1 :: Mark END
+18. dropdown   @(3,6) 1x1 :: [unknown, winner, forced_error, unforced_error, service_fault, let, other]
+19. button     @(4,6) 1x1 :: Save Rally
+20. html       @(1,7) 4x2 :: <runtime html>
+21. label      @(1,9) 4x1 :: Recent rallies (select one, then Edit/Delete):
+22. list       @(1,10) 4x4 :: <list>
+23. button     @(1,14) 1x1 :: Edit selected
+24. button     @(2,14) 1x1 :: Delete selected
+25. button     @(3,14) 1x1 :: Undo last
+26. button     @(4,14) 1x1 :: Refresh
