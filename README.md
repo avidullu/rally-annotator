@@ -8,12 +8,13 @@ reason). It writes one CSV row per rally — clean ground-truth labels for train
 (point) segmentation models, or just for cutting highlights.
 
 ```
-rally_number,start_time,end_time,ending_reason,sport
-1,8.800,11.500,winner,badminton
-2,24.389,46.589,unforced_error,badminton
+rally_number,start_time,end_time,ending_reason,sport,shots_count
+1,8.800,11.500,winner,badminton,9
+2,24.389,46.589,unforced_error,badminton,21
 ```
 
-Times are **decimal seconds**. See [docs/CSV_FORMAT.md](docs/CSV_FORMAT.md).
+Times are **decimal seconds**; `shots_count` is an **optional** rally shot/stroke count (blank if you skip it).
+See [docs/CSV_FORMAT.md](docs/CSV_FORMAT.md).
 
 ## Why
 Labeling rally boundaries is the slow, expensive prerequisite for any rally-detection model. Most tools
@@ -32,17 +33,19 @@ pausing to the exact frame before each mark — turning "watch a match" into "pr
 Requires **VLC 3.0.x**. (VLC 4.0 changed the Lua input/listener API; targeting 3.x for now.)
 
 ## Use
-**Playback is built in** — the **Back 5s · Play / Resume · Pause · Fwd 5s** row drives the VLC player from the
-annotation window, so you can pause, label, and resume without ever switching to the main VLC window.
+**Playback is built in** — the **Back 5s · Play / Pause · Fwd 5s** row drives the VLC player from the
+annotation window, so you can pause, label, and resume without ever switching to the main VLC window. **Play / Pause**
+is a single toggle (it resumes when paused, pauses when playing).
 
 1. Pick the **Sport** (it stays set across rallies).
 2. When a rally begins, click **Mark START** — it snapshots the current playback time into the **Start** field
    (pause/scrub first for frame accuracy; you can also edit the field by hand).
 3. When the rally ends, click **Mark END** (fills the **End** field). This *arms* the rally; nothing is written yet.
-4. Choose the **Ending reason** (sits between **Mark END** and **Save Rally**; defaults to **`unknown`**), then click
-   **Save Rally** to write one CSV row. The reason **resets to `unknown` after every save** — so it never silently
-   reuses the previous rally's reason, and you can pick the same reason on consecutive rallies. Use the
-   **Next rally #** field to resume/insert numbering anywhere.
+4. Choose the **Ending reason** (sits between **Mark END** and **Save Rally**; defaults to **`unknown`**), optionally
+   type a **Number of shots** (the rally's shot/stroke count — leave blank to skip), then click
+   **Save Rally** to write one CSV row. The reason **resets to `unknown` after every save** (and the shots field
+   clears too) — so neither silently reuses the previous rally's value, and you can pick the same reason on
+   consecutive rallies. Use the **Next rally #** field to resume/insert numbering anywhere.
 5. **Recent rallies** list: select a row, then **Edit selected** (loads it back into the fields to fix
    start/end/reason/sport → **Save changes**) or **Delete selected**. **Undo last** removes the most recent row —
    the button shows which one, e.g. `Undo last (#7)`, and the status panel shows that row's details — or clears an
@@ -98,19 +101,19 @@ forced-vs-unforced, **default to `unforced_error`**. See the full decision guide
 in **[docs/ENDING_REASONS.md](docs/ENDING_REASONS.md)** (also available via the in-plugin **Help** button).
 
 ## Roadmap
-- [ ] Live-test the v1.5 dialog in VLC (playback controls, two-step Save, `unknown`-default reason, editable times,
-      Next rally #, Recent-rallies Edit/Delete) across all five sports.
+- [ ] Live-test the v1.6 dialog in VLC (single Play / Pause toggle, optional Number of shots, two-step Save,
+      `unknown`-default reason, editable times, Next rally #, Recent-rallies Edit/Delete) across all five sports.
 - [ ] Optional per-sport reason presets / hotkeys.
 - [ ] Alternative front-ends for power users / remote raters: a `python-vlc` + Tk/Qt app with global keyboard
       shortcuts (S/E/1–6/U), and a zero-install HTML5 `<video>` page that exports the same CSV.
-- [ ] Optional extra columns (e.g. `shots_count`, server/receiver) behind a toggle.
+- [x] Optional `shots_count` column (v1.6). Further extra columns (e.g. server/receiver) still TBD behind a toggle.
 
 ## Tests
 The dialog logic has a headless test suite that stubs VLC's `vlc` API (widgets + playback), loads the real
 extension, drives its callbacks, and asserts the results — run with **Lua 5.1** (the interpreter VLC 3.x embeds):
 
 ```bash
-lua5.1 test/dialog_test.lua        # exit 0 = pass; covers reason reset, numbering, undo, help toggle, playback gating
+lua5.1 test/dialog_test.lua        # exit 0 = pass; covers reason reset, shots column, numbering, undo, help toggle, Play/Pause toggle
 ```
 
 It covers all the logic but not VLC's GUI rendering or real playback (there's no headless VLC UI automation) — those

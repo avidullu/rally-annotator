@@ -90,7 +90,7 @@ local function ok(name, cond) eq(name, cond and true or false, true) end
 --------------------------------------------------------------------------------
 dofile(EXT)
 ok("descriptor() returns a title", descriptor().title ~= nil)
-eq("descriptor version", descriptor().version, "1.5")
+eq("descriptor version", descriptor().version, "1.6")
 activate()
 local d = DIALOG
 ok("dialog was created", d ~= nil)
@@ -103,15 +103,17 @@ local function find(kind, col, row)
 end
 local function buttonWithCb(cb) for _,w in ipairs(d.widgets) do if w.kind=='button' and w.cb==cb then return w end end end
 local function pickReason(name)
-  local w = find('dropdown', 3, 5)
+  local w = find('dropdown', 3, 6)
   for _, v in ipairs(w.values) do if v.text==name then w.sel_id=v.id; w.sel_text=v.text; return end end
   error('reason option not found: '..name)
 end
-local function curReason() return (find('dropdown',3,5)).sel_text end
+local function curReason() return (find('dropdown',3,6)).sel_text end
 local function nextF()  return (find('text_input',2,4)):get_text() end
 local function setNext(s) (find('text_input',2,4)):set_text(s) end
 local function setS(s)  (find('text_input',2,3)):set_text(s) end
 local function setE(s)  (find('text_input',4,3)):set_text(s) end
+local function setShots(s) (find('text_input',4,4)):set_text(s) end
+local function getShots()  return (find('text_input',4,4)):get_text() end
 
 local helpBtn = buttonWithCb(show_help)
 local statusHtml; for _, w in ipairs(d.widgets) do if w.kind=='html' then statusHtml=w; break end end
@@ -123,12 +125,14 @@ end
 -- Construction: all controls wired
 --------------------------------------------------------------------------------
 ok("Back 5s button wired",       buttonWithCb(seek_back) ~= nil)
-ok("Play / Resume button wired", buttonWithCb(play_resume) ~= nil)
-ok("Pause button wired",         buttonWithCb(pause_playback) ~= nil)
+ok("Play / Pause button wired",  buttonWithCb(play_pause) ~= nil)
+ok("single playback toggle (no separate Resume/Pause globals)",
+   _G.play_resume == nil and _G.pause_playback == nil)
 ok("Fwd 5s button wired",        buttonWithCb(seek_fwd) ~= nil)
 ok("Mark START button wired",    buttonWithCb(mark_start) ~= nil)
 ok("Save Rally button wired",    buttonWithCb(save_rally) ~= nil)
-ok("reason dropdown present",    find('dropdown',3,5) ~= nil)
+ok("reason dropdown present",    find('dropdown',3,6) ~= nil)
+ok("Number of shots input present", find('text_input',4,4) ~= nil)
 
 --------------------------------------------------------------------------------
 -- Help toggle (dedicated panel add/remove)
@@ -143,12 +147,13 @@ show_help(); eq("help hides again", dedicatedHelp(), 0)
 -- Reason: default unknown, resets each save, consecutive identical reasons work
 --------------------------------------------------------------------------------
 eq("reason defaults to unknown", curReason(), "unknown")
-setNext('1'); setS('1'); setE('2'); pickReason('winner'); save_rally()
+setNext('1'); setS('1'); setE('2'); pickReason('winner'); setShots('12'); save_rally()
 eq("reason resets to unknown after save A", curReason(), "unknown")
+eq("shots field clears after save A", getShots(), "")          -- non-sticky like reason
 eq("Next# auto-advances to 2", nextF(), "2")
-setS('3'); setE('4'); pickReason('winner'); save_rally()        -- consecutive winner
+setS('3'); setE('4'); pickReason('winner'); save_rally()        -- consecutive winner, no shots
 eq("reason resets to unknown after save B", curReason(), "unknown")
-setS('5'); setE('6'); save_rally()                              -- no pick -> unknown
+setS('5'); setE('6'); save_rally()                              -- no pick -> unknown, no shots
 eq("Next# at 4 after three saves", nextF(), "4")
 
 --------------------------------------------------------------------------------
@@ -165,24 +170,39 @@ eq("undo re-syncs Next# to real next (3, not 99)", nextF(), "3")
 -- Verify the CSV the extension actually wrote (1=winner, 2=winner, 3 undone)
 --------------------------------------------------------------------------------
 local fh = io.open(CSV, "r"); local csv = fh and fh:read("*a") or ""; if fh then fh:close() end
-ok("CSV has header", csv:find("rally_number,start_time,end_time,ending_reason,sport", 1, true) ~= nil)
-ok("CSV row #1 winner", csv:find("\n1,1.000,2.000,winner,", 1, true) ~= nil)
-ok("CSV row #2 winner (consecutive)", csv:find("\n2,3.000,4.000,winner,", 1, true) ~= nil)
+ok("CSV has shots_count header", csv:find("rally_number,start_time,end_time,ending_reason,sport,shots_count", 1, true) ~= nil)
+ok("CSV row #1 winner + shots=12", csv:find("\n1,1.000,2.000,winner,badminton,12\n", 1, true) ~= nil)
+ok("CSV row #2 winner, shots column blank", csv:find("\n2,3.000,4.000,winner,badminton,\n", 1, true) ~= nil)
 ok("CSV row #3 was undone (absent)", csv:find("\n3,", 1, true) == nil)
 os.remove(CSV)
 
 --------------------------------------------------------------------------------
--- Playback: pause()/play() are gated on status() so Pause and Resume are deterministic
+-- Edit reloads the saved shots into the field; editing the count rewrites the CSV
+--------------------------------------------------------------------------------
+local lst = find('list', 1, 10)
+lst.selection = { [1] = "row #1" }       -- select rally #1 in the Recent list
+edit_selected()
+eq("edit loads shots=12 into field", getShots(), "12")
+eq("edit loads start time", (find('text_input',2,3)):get_text(), "1.000")
+eq("edit loads reason winner", curReason(), "winner")
+setShots('7'); save_rally()              -- change the count and commit
+eq("shots field clears after edit-save", getShots(), "")
+local fh2 = io.open(CSV, "r"); local csv2 = fh2 and fh2:read("*a") or ""; if fh2 then fh2:close() end
+ok("edited shots persisted (#1 now 7)", csv2:find("\n1,1.000,2.000,winner,badminton,7\n", 1, true) ~= nil)
+os.remove(CSV)
+
+--------------------------------------------------------------------------------
+-- Playback: one Play / Pause toggle branches on status() (playing<->paused), and
+-- starts fresh from stopped. Seek is relative ±5s, clamped at 0.
 --------------------------------------------------------------------------------
 PB.state = "playing"; PB.time_us = 30 * 1000000
-pause_playback(); eq("Pause while playing -> paused", PB.state, "paused")
-pause_playback(); eq("Pause while paused stays paused (gated, no toggle)", PB.state, "paused")
-play_resume();    eq("Play/Resume while paused -> playing", PB.state, "playing")
-play_resume();    eq("Play/Resume while playing stays playing", PB.state, "playing")
-seek_back();      eq("Back 5s from 30s -> 25s", PB.time_us, 25 * 1000000)
-seek_fwd();       eq("Fwd 5s from 25s -> 30s", PB.time_us, 30 * 1000000)
+play_pause(); eq("Play/Pause while playing -> paused", PB.state, "paused")
+play_pause(); eq("Play/Pause while paused -> playing", PB.state, "playing")
+play_pause(); eq("Play/Pause toggles back to paused", PB.state, "paused")
+seek_back();  eq("Back 5s from 30s -> 25s", PB.time_us, 25 * 1000000)
+seek_fwd();   eq("Fwd 5s from 25s -> 30s", PB.time_us, 30 * 1000000)
 PB.time_us = 2 * 1000000; seek_back(); eq("Back 5s from 2s clamps to 0", PB.time_us, 0)
-PB.state = "stopped"; play_resume(); eq("Play/Resume from stopped -> playing", PB.state, "playing")
+PB.state = "stopped"; play_pause(); eq("Play/Pause from stopped -> playing", PB.state, "playing")
 
 --------------------------------------------------------------------------------
 print(string.format("\n%d passed, %d failed", pass, fail))
