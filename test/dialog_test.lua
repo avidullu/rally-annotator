@@ -5,11 +5,12 @@
   loads the real extension, drives its callbacks, and asserts the resulting state.
   It cannot exercise VLC's actual GUI rendering, but it covers all the dialog LOGIC
   (mark/save/edit/delete/undo, reason reset, Next-# numbering, help toggle, and the
-  playback controls) and catches regressions before they reach VLC.
+  playback controls) plus a LAYOUT SNAPSHOT of the whole widget grid + window title
+  (diffed against test/dialog_layout.snapshot), and catches regressions before VLC.
 
   Run (needs Lua 5.1, matching VLC 3.x's embedded interpreter):
-      lua5.1 test/dialog_test.lua        # from the repo root
-  Exit code is 0 on success, 1 if any assertion fails.
+      lua5.1 test/dialog_test.lua            # from the repo root; exit 0 = pass, 1 = fail
+      lua5.1 test/dialog_test.lua --update   # regenerate the layout snapshot golden
 ]]
 
 -- Resolve the extension path relative to this test file, so it runs from anywhere.
@@ -27,8 +28,9 @@ os.remove(CSV)
 --------------------------------------------------------------------------------
 -- Minimal stub of VLC's dialog/widget + playback API
 --------------------------------------------------------------------------------
-local function new_widget(kind, col, row)
-  local w = { kind = kind, col = col, row = row, text = nil, values = {}, selection = {}, deleted = false }
+local function new_widget(kind, col, row, width, height)
+  local w = { kind = kind, col = col, row = row, width = width or 1, height = height or 1,
+              text = nil, values = {}, selection = {}, deleted = false }
   function w:set_text(t) self.text = t end
   function w:get_text() return self.text end
   function w:add_value(t, id) self.values[#self.values+1] = {id=id, text=t}; if #self.values==1 then self.sel_id=id; self.sel_text=t end end
@@ -41,12 +43,12 @@ end
 local DIALOG
 local function new_dialog(title)
   local d = { title = title, widgets = {}, updates = 0 }
-  function d:add_label(t,c,r) local w=new_widget('label',c,r); w.text=t; self.widgets[#self.widgets+1]=w; return w end
-  function d:add_button(t,cb,c,r) local w=new_widget('button',c,r); w.text=t; w.cb=cb; self.widgets[#self.widgets+1]=w; return w end
-  function d:add_dropdown(c,r) local w=new_widget('dropdown',c,r); self.widgets[#self.widgets+1]=w; return w end
-  function d:add_list(c,r) local w=new_widget('list',c,r); self.widgets[#self.widgets+1]=w; return w end
-  function d:add_text_input(t,c,r) local w=new_widget('text_input',c,r); w.text=(type(t)=='string') and t or ''; self.widgets[#self.widgets+1]=w; return w end
-  function d:add_html(t,c,r) local w=new_widget('html',c,r); w.text=t; self.widgets[#self.widgets+1]=w; return w end
+  function d:add_label(t,c,r,cs,rs) local w=new_widget('label',c,r,cs,rs); w.text=t; self.widgets[#self.widgets+1]=w; return w end
+  function d:add_button(t,cb,c,r,cs,rs) local w=new_widget('button',c,r,cs,rs); w.text=t; w.cb=cb; self.widgets[#self.widgets+1]=w; return w end
+  function d:add_dropdown(c,r,cs,rs) local w=new_widget('dropdown',c,r,cs,rs); self.widgets[#self.widgets+1]=w; return w end
+  function d:add_list(c,r,cs,rs) local w=new_widget('list',c,r,cs,rs); self.widgets[#self.widgets+1]=w; return w end
+  function d:add_text_input(t,c,r,cs,rs) local w=new_widget('text_input',c,r,cs,rs); w.text=(type(t)=='string') and t or ''; self.widgets[#self.widgets+1]=w; return w end
+  function d:add_html(t,c,r,cs,rs) local w=new_widget('html',c,r,cs,rs); w.text=t; self.widgets[#self.widgets+1]=w; return w end
   function d:del_widget(w) w.deleted=true end
   function d:show() end
   function d:update() self.updates = self.updates + 1 end
@@ -94,6 +96,72 @@ eq("descriptor version", descriptor().version, "1.6")
 activate()
 local d = DIALOG
 ok("dialog was created", d ~= nil)
+
+-- the window title carries the version, and stays in sync with the descriptor (no drift)
+ok("dialog title shows version", d.title:find("v" .. descriptor().version, 1, true) ~= nil)
+eq("dialog title is exactly Name + version", d.title, "Rally Annotator v" .. descriptor().version)
+
+--------------------------------------------------------------------------------
+-- Layout snapshot -- the full widget grid + window title, diffed against a committed
+-- golden (test/dialog_layout.snapshot). This is the deterministic, cross-platform
+-- equivalent of a screenshot diff: VLC renders extension dialogs through Qt with no
+-- headless/offscreen path, so we snapshot the widget tree the extension HANDS to VLC
+-- (kind, grid column/row, column/row span, and the caption/options) instead of pixels.
+-- Catches any moved, resized, renamed, added, or removed control, and any title change.
+-- Runs here, right after activate(), while the dialog is in its pristine initial state
+-- (no rows in the temp CSV, empty Start/End, help hidden) -- before any callback below
+-- mutates the widget list. Regenerate intentionally with:
+--     lua5.1 test/dialog_test.lua --update      (or UPDATE_SNAPSHOT=1)
+--------------------------------------------------------------------------------
+local function snap_caption(w)
+  if w.kind == 'dropdown' then
+    local opts = {}; for _, v in ipairs(w.values) do opts[#opts+1] = v.text end
+    return '[' .. table.concat(opts, ', ') .. ']'           -- dropdown options (sports / reasons)
+  elseif w.kind == 'html' then return '<runtime html>'      -- status/help body is dynamic content
+  elseif w.kind == 'list' then return '<list>'              -- recent-rallies list (rows are data)
+  elseif w.kind == 'text_input' then return string.format('%q', w.text or '')
+  else return w.text or '' end                              -- label / button caption
+end
+local function render_snapshot()
+  local lines = { 'title :: ' .. tostring(d.title) }
+  local i = 0
+  for _, w in ipairs(d.widgets) do
+    if not w.deleted then
+      i = i + 1
+      lines[#lines+1] = string.format('%2d. %-10s @(%d,%d) %dx%d :: %s',
+        i, w.kind, w.col, w.row, w.width, w.height, snap_caption(w))
+    end
+  end
+  return table.concat(lines, '\n') .. '\n'
+end
+local function split_lines(s) local t={}; for l in (s.."\n"):gmatch('(.-)\n') do t[#t+1]=l end; return t end
+
+local SNAP_FILE = here .. 'dialog_layout.snapshot'
+local snap_got  = render_snapshot()
+local snap_update = os.getenv('UPDATE_SNAPSHOT') == '1' or (arg and arg[1] == '--update')
+if snap_update then
+  local f = assert(io.open(SNAP_FILE, 'w')); f:write(snap_got); f:close()
+  print('  (wrote layout snapshot: ' .. SNAP_FILE .. ')')
+else
+  local f = io.open(SNAP_FILE, 'r'); local snap_want = f and f:read('*a') or nil; if f then f:close() end
+  if snap_want == nil then
+    fail = fail + 1
+    print('  FAIL  layout snapshot golden missing -- create it: lua5.1 test/dialog_test.lua --update')
+  elseif snap_got == snap_want then
+    pass = pass + 1
+  else
+    fail = fail + 1
+    print('  FAIL  dialog layout/title differs from ' .. SNAP_FILE)
+    local g, w = split_lines(snap_got), split_lines(snap_want)
+    for k = 1, math.max(#g, #w) do
+      if g[k] ~= w[k] then
+        print(string.format('          want L%d: %s', k, w[k] or '<missing>'))
+        print(string.format('          got  L%d: %s', k, g[k] or '<missing>'))
+      end
+    end
+    print('        If this layout change is intentional, regenerate: lua5.1 test/dialog_test.lua --update')
+  end
+end
 
 -- live (non-deleted) widget by grid position; reason dropdown is recreated on reset
 local function find(kind, col, row)

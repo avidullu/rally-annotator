@@ -1,4 +1,4 @@
---[[ rally_annotator.lua  --  VLC Lua EXTENSION (v1.5)
+--[[ rally_annotator.lua  --  VLC Lua EXTENSION (v1.6)
 
   Rally Annotator for NET-SEPARATED RACQUET SPORTS
   (badminton · tennis · table tennis · pickleball · padel)
@@ -60,10 +60,12 @@
 --------------------------------------------------------------------------------
 -- Extension registration
 --------------------------------------------------------------------------------
+local VERSION = "1.6"
+
 function descriptor()
   return {
     title       = "Rally Annotator",
-    version     = "1.6",
+    version     = VERSION,
     author      = "Avi Dullu",
     url         = "https://github.com/avidullu/rally-annotator",
     shortdesc   = "Mark rally start/end + a point-ending reason to a CSV (net-separated racquet sports)",
@@ -689,7 +691,7 @@ end
 -- Dialog construction
 --------------------------------------------------------------------------------
 local function create_dialog()
-  d = vlc.dialog("Rally Annotator")
+  d = vlc.dialog("Rally Annotator v" .. VERSION)
 
   d:add_label("Sport:", 1, 1, 1, 1)
   w_sport = d:add_dropdown(2, 1, 2, 1)

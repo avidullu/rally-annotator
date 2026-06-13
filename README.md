@@ -1,5 +1,7 @@
 # Rally Annotator
 
+[![tests](https://github.com/avidullu/rally-annotator/actions/workflows/ci.yml/badge.svg)](https://github.com/avidullu/rally-annotator/actions/workflows/ci.yml)
+
 A tiny **VLC plugin** to hand-label rally **start/end + point-stop reason** while you watch a match,
 for **net-separated racquet sports** — badminton, tennis, table tennis, pickleball, padel.
 

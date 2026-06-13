@@ -1,0 +1,31 @@
+name: tests
+
+# Runs the headless dialog suite on every push to main and every PR. VLC can't be
+# driven headlessly (Qt GUI, no offscreen render, no CLI to auto-open a Lua extension),
+# so instead of pixels we exercise the extension's logic AND diff its full widget grid +
+# window title against a committed golden -- the deterministic stand-in for a screenshot.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  dialog-suite:
+    name: Lua 5.1 headless dialog suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Lua 5.1 is the exact interpreter VLC 3.x embeds, so test semantics match the player.
+      - name: Install Lua 5.1
+        run: sudo apt-get update && sudo apt-get install -y lua5.1
+
+      # Syntax gate: the extension and the test must parse. A scan-time syntax error is how
+      # the extension silently failed to load in v1.3.1, so we fail fast and loudly here.
+      - name: Syntax-check the extension and tests
+        run: luac5.1 -p vlc/rally_annotator.lua test/dialog_test.lua
+
+      # Logic (mark/save/edit/undo, reason reset, numbering, help, playback) + the layout
+      # snapshot (widget grid + title vs test/dialog_layout.snapshot). Exit 0 = all pass.
+      - name: Run dialog tests (logic + layout snapshot)
+        run: lua5.1 test/dialog_test.lua

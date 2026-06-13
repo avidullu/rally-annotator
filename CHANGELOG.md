@@ -11,8 +11,27 @@
   like the reason), **Edit selected** reloads the saved count, and the Recent-rallies list shows it. Older 5-column
   CSVs still load (the column reads blank); readers that go by column name are unaffected.
 - Dialog regrouped for the new field: **Number of shots** sits next to **Next rally #**; the reason label/dropdown
-  and the Mark/Save action row shift down one row. Test suite extended to **42 assertions** (shots write/blank/edit,
-  Play/Pause toggle) and stays green via `lua5.1 test/dialog_test.lua`.
+  and the Mark/Save action row shift down one row. The layout-snapshot golden (`test/dialog_layout.snapshot`) is
+  regenerated for the new grid, and the suite grows to **45 assertions** (shots write/blank/edit, Play/Pause toggle),
+  green via `lua5.1 test/dialog_test.lua`.
+
+## v1.5.1 — 2026-06-09
+- **UX: the annotation window title now shows the version** — the dialog opens as **"Rally Annotator v1.5.1"** instead
+  of just "Rally Annotator", so a rater can tell at a glance which build they're running. The version is a single
+  `VERSION` constant the descriptor and the dialog title both read, so they can't drift.
+- **Test:** added two assertions that the dialog title carries the version and exactly matches `Rally Annotator v` +
+  `descriptor().version`.
+- **Test: layout snapshot** (`test/dialog_layout.snapshot`). The harness now serializes the full widget grid the
+  extension hands to VLC — every control's kind, grid column/row, column/row span, and caption/options, plus the
+  window title — and diffs it against a committed golden. It's the deterministic, cross-platform stand-in for a
+  screenshot diff (VLC renders extension dialogs through Qt with no headless path), catching any moved, resized,
+  renamed, added, or removed control and any title change. Regenerate intentional layout changes with
+  `lua5.1 test/dialog_test.lua --update`. **39 assertions total.**
+- **CI: GitHub Actions** (`.github/workflows/ci.yml`) runs on every push and PR — syntax-checks the extension with
+  `luac5.1 -p` (the kind of scan-time error that silently broke loading in v1.3.1), then runs the full dialog suite
+  including the layout snapshot. A status badge is on the root `README`.
+- **Docs:** `test/README.md` gains a **Windows** Lua-5.1 install FAQ (no-admin portable install + the `choco` route),
+  since `lua5.1` isn't on PATH by default there.
 
 ## v1.5 — 2026-06-08
 - **Feature: playback controls (issue #4).** A new **Back 5s · Play / Resume · Pause · Fwd 5s** row drives the VLC
