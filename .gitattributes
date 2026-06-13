@@ -1,0 +1,5 @@
+# This repo is LF-canonical: VLC 3.x embeds Lua 5.1 (LF) and the headless dialog suite
+# diffs the widget grid against test/dialog_layout.snapshot. Without this, a Windows
+# clone (core.autocrlf=true) checks the snapshot out as CRLF and the suite fails on the
+# invisible \r even though the layout is byte-identical. Force LF on checkout everywhere.
+* text=auto eol=lf
