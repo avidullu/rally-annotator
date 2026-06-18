@@ -68,7 +68,8 @@ point at the current video and load its rallies. (Playback *position* isn't rest
 > **Where's the help / "About" text?** The empty *"About …lua"* box under **Tools → Plugins and extensions →
 > Add-ons** is VLC's own add-on info dialog; its body ("Lua script") is a constant baked into VLC and **can't be
 > set by an extension**. Use the **Help** button inside the Rally Annotator dialog instead. (The descriptor's
-> description does show in the *Active Extensions* tab's **"More information"** dialog.)
+> description does show in the *Active Extensions* tab's **"More information"** dialog, and the *Active Extensions*
+> list shows the title with its version, e.g. **`Rally Annotator v1.6.3`**, so you can confirm which build is loaded.)
 
 ## Sports & taxonomy
 Net-separated racquet sports share a forced/unforced-error point-stop taxonomy, so one tool covers them all:

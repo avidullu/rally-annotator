@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.6.3 — 2026-06-18
+- **The version now shows next to the plugin in VLC's "Active Extensions" list** (Tools → Plugins and extensions →
+  Active Extensions) — e.g. **`Rally Annotator v1.6.3`** — matching how VLsub shows `VLsub 0.11.1`. VLC renders the
+  descriptor `title` verbatim there and never appends the version, so the version is now baked into the title, fed by
+  the same `VERSION` constant as the dialog window title and `descriptor().version` (so all three stay in sync).
+  Regression test asserts `descriptor().title == "Rally Annotator v" .. version`.
+
 ## v1.6.2 — 2026-06-18
 - **Fix (data safety on resume): rallies could be written to `~/rally_labels.csv` instead of next to the video.**
   `out_path` was resolved **once**, when the extension was enabled. If the video wasn't loaded at that instant

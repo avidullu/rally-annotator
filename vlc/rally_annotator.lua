@@ -1,4 +1,4 @@
---[[ rally_annotator.lua  --  VLC Lua EXTENSION (v1.6.2)
+--[[ rally_annotator.lua  --  VLC Lua EXTENSION (v1.6.3)
 
   Rally Annotator for NET-SEPARATED RACQUET SPORTS
   (badminton · tennis · table tennis · pickleball · padel)
@@ -10,6 +10,11 @@
 
   Output CSV columns (times in decimal SECONDS):
       rally_number,start_time,end_time,ending_reason,sport,shots_count
+
+  WHAT'S NEW IN v1.6.3
+    - The version now shows next to the plugin name in VLC's "Active Extensions"
+      list (Tools > Plugins and extensions), e.g. "Rally Annotator v1.6.3" --
+      VLC shows the descriptor title verbatim, so the version is baked into it.
 
   WHAT'S NEW IN v1.6.2
     - Fix (data safety on resume): if the extension was enabled BEFORE the video
@@ -73,11 +78,15 @@
 --------------------------------------------------------------------------------
 -- Extension registration
 --------------------------------------------------------------------------------
-local VERSION = "1.6.2"
+local VERSION = "1.6.3"
 
 function descriptor()
   return {
-    title       = "Rally Annotator",
+    -- VLC's "Active Extensions" list shows the title VERBATIM (it never appends the
+    -- version), so we bake the version into the title -- same as VLsub -- to show it
+    -- next to the plugin name there. Fed by VERSION so it can't drift. (Concatenation
+    -- only: descriptor() runs in VLC's restricted scan sandbox, which has no globals.)
+    title       = "Rally Annotator v" .. VERSION,
     version     = VERSION,
     author      = "Avi Dullu",
     url         = "https://github.com/avidullu/rally-annotator",
