@@ -1,4 +1,4 @@
---[[ rally_annotator.lua  --  VLC Lua EXTENSION (v1.6.1)
+--[[ rally_annotator.lua  --  VLC Lua EXTENSION (v1.6.2)
 
   Rally Annotator for NET-SEPARATED RACQUET SPORTS
   (badminton · tennis · table tennis · pickleball · padel)
@@ -10,6 +10,14 @@
 
   Output CSV columns (times in decimal SECONDS):
       rally_number,start_time,end_time,ending_reason,sport,shots_count
+
+  WHAT'S NEW IN v1.6.2
+    - Fix (data safety on resume): if the extension was enabled BEFORE the video
+      was loaded, the CSV path fell back to ~/rally_labels.csv and rallies were
+      written there instead of next to the video -- so on pause/restart the
+      video's labels looked "lost". Now the moment you Mark START (video is
+      provably playing), the tool adopts <video>.rallies.csv and loads any
+      rallies already saved for it.
 
   WHAT'S NEW IN v1.6.1
     - Fix: the Recent rallies list now shows EVERY rally (it scrolls), not just
@@ -65,7 +73,7 @@
 --------------------------------------------------------------------------------
 -- Extension registration
 --------------------------------------------------------------------------------
-local VERSION = "1.6.1"
+local VERSION = "1.6.2"
 
 function descriptor()
   return {
@@ -164,6 +172,8 @@ local rows = {}         -- in-memory rally rows: { n, s, e, reason, sport, [shot
 local mode = "new"      -- "new" (marking a fresh rally) or "edit" (editing a row)
 local edit_index = nil  -- index into rows when mode == "edit"
 local out_path          -- resolved CSV path (set on activate; re-resolved by Refresh)
+local out_path_is_fallback = false  -- true when out_path is the home-dir fallback (no video
+                                    -- was resolvable when we last set it); see adopt_current_video_csv
 
 --------------------------------------------------------------------------------
 -- Helpers (declared before the global callbacks that capture them)
@@ -505,6 +515,7 @@ local function sync_to_current_video()
     set_status("No media is playing -- still using this CSV. Open the video, then click Refresh.")
     return
   end
+  out_path_is_fallback = false   -- a video is playing now -> we have a real path
   local new_path = resolve_out_path()
   if new_path == out_path then
     load_rows()                  -- re-read in case the file changed on disk
@@ -521,6 +532,25 @@ local function sync_to_current_video()
   refresh_buttons()
   set_status(string.format(
     "Switched to the current video. Loaded %d existing rallies; next is #%d.", #rows, next_rally_number()))
+end
+
+-- Lazily adopt the playing video's CSV. We may have started on the home-dir FALLBACK
+-- (extension enabled before the video was loaded, so no path was resolvable then). The
+-- moment a timestamp exists the video is provably playing, so switch to <video>.rallies.csv
+-- and load that video's existing rallies BEFORE anything is written to the fallback -- this
+-- is what makes "enable, then open the video" and pause/restart resume correctly instead of
+-- silently writing to ~/rally_labels.csv. No-op once we're already on a real video CSV.
+local function adopt_current_video_csv()
+  if not out_path_is_fallback then return end
+  local media = current_media_path()
+  if not media then return end           -- still no video -> stay on the fallback for now
+  out_path_is_fallback = false           -- a real path is resolvable now
+  local p = resolve_out_path()
+  if p == out_path then return end       -- already pointing there (defensive)
+  out_path = p
+  load_rows()                            -- pick up rallies already saved for this video
+  refresh_next_field()
+  refresh_list()
 end
 
 -- Seek the player by delta_s seconds (relative), clamped at 0 (time is microseconds in 3.x).
@@ -541,6 +571,7 @@ end
 function mark_start()
   local t = now_seconds()
   if not t then set_status("No media playing -- cannot mark START."); return end
+  adopt_current_video_csv()   -- video is playing now: make sure we're on its CSV, not the fallback
   w_start:set_text(string.format("%.3f", t))
   refresh_buttons()
   set_status(string.format("START set @ %s. Play to the rally's end, then Mark END.", fmt_clock(t)))
@@ -555,6 +586,7 @@ function mark_end()
 end
 
 function save_rally()
+  adopt_current_video_csv()   -- in case times were typed by hand without Mark START
   local s = get_field_num(w_start)
   local e = get_field_num(w_end)
   if not s then set_status("Set a START time first (click Mark START)."); return end
@@ -739,7 +771,11 @@ local function create_dialog()
   refresh_list()
   refresh_buttons()
   d:show()
-  if #rows > 0 then
+  if out_path_is_fallback then
+    set_status("No video detected yet. Open/play the video, then click Mark START -- the tool will switch to "
+      .. "that video's own .rallies.csv automatically (and load any rallies already saved for it). "
+      .. "Tip: open the video FIRST, then enable this extension.")
+  elseif #rows > 0 then
     set_status(string.format(
       "Resumed this video: %d existing rallies loaded (next is #%d). Click Help for the guide.",
       #rows, next_rally_number()))
@@ -761,6 +797,7 @@ function activate()
   w_help = nil
   w_reason = nil          -- niled so the first rebuild on a re-enable doesn't del a stale handle
   out_path = resolve_out_path()
+  out_path_is_fallback = (current_media_path() == nil)   -- no video yet -> adopt its CSV lazily on first Mark
   load_rows()             -- continue an existing CSV (numbering + recent list)
   create_dialog()
 end

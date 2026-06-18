@@ -59,6 +59,9 @@ end
 
 -- playback state machine (mirrors VLC 3.x: pause() is a toggle)
 local PB = { state = "stopped", time_us = 0 }
+-- Currently-loaded media URI, or nil for "no media" (the default, so existing tests keep
+-- resolving the CSV to the HOME fallback). Set MEDIA_URI to simulate a loaded video.
+MEDIA_URI = nil
 vlc = {
   dialog   = function(t) DIALOG = new_dialog(t); return DIALOG end,
   object   = { input = function() return (PB.state ~= "stopped") and { kind = "input" } or nil end },
@@ -66,7 +69,7 @@ vlc = {
     get = function(_, name) if name == "time" then return PB.time_us end return nil end,
     set = function(_, name, val) if name == "time" then PB.time_us = val end end,
   },
-  input    = { item = function() return nil end },
+  input    = { item = function() return MEDIA_URI and { uri = function() return MEDIA_URI end } or nil end },
   playlist = {
     status = function() return PB.state end,
     play   = function() PB.state = "playing" end,
@@ -92,7 +95,7 @@ local function ok(name, cond) eq(name, cond and true or false, true) end
 --------------------------------------------------------------------------------
 dofile(EXT)
 ok("descriptor() returns a title", descriptor().title ~= nil)
-eq("descriptor version", descriptor().version, "1.6.1")
+eq("descriptor version", descriptor().version, "1.6.2")
 activate()
 local d = DIALOG
 ok("dialog was created", d ~= nil)
@@ -288,6 +291,43 @@ do
   eq("oldest rally #1 is the first row", L.values[1] and L.values[1].text:match("^#(%d+)"), "1")
   eq("newest rally #13 is the last row", L.values[#L.values] and L.values[#L.values].text:match("^#(%d+)"), "13")
   os.remove(CSV)
+end
+
+--------------------------------------------------------------------------------
+-- Data safety on resume: enabling the extension BEFORE the video loads used to write
+-- rallies to ~/rally_labels.csv (the home fallback) and never reload the video's own CSV
+-- on restart, so labels looked "lost". The moment a timestamp exists (video playing), the
+-- first Mark START must adopt <video>.rallies.csv and load any rallies already saved for it.
+--------------------------------------------------------------------------------
+do
+  local TMPb = (TMP:sub(-1) == sep) and TMP:sub(1, -2) or TMP
+  local VIDEO_CSV = TMPb .. sep .. "clip.rallies.csv"
+  os.remove(CSV); os.remove(VIDEO_CSV)
+  local vf = io.open(VIDEO_CSV, "w")            -- a prior session already saved 2 rallies here
+  vf:write("rally_number,start_time,end_time,ending_reason,sport,shots_count\n")
+  vf:write("1,1.000,2.000,winner,badminton,\n")
+  vf:write("2,3.000,4.000,let,badminton,\n")
+  vf:close()
+
+  MEDIA_URI = nil; PB.state = "stopped"          -- enable with NO video loaded -> home fallback
+  activate()
+  local D2 = DIALOG
+  local function live(kind, c, r)
+    local f; for _, w in ipairs(D2.widgets) do if w.kind==kind and w.col==c and w.row==r and not w.deleted then f=w end end; return f
+  end
+  local function nVals() local L; for _, w in ipairs(D2.widgets) do if w.kind=='list' and not w.deleted then L=w end end; return L and #L.values or -1 end
+  eq("fallback start shows no video rallies", nVals(), 0)
+
+  MEDIA_URI = "file://" .. TMPb .. sep .. "clip.mp4"; PB.state = "playing"; PB.time_us = 10 * 1000000
+  mark_start()                                   -- video provably playing -> adopt clip.rallies.csv
+  eq("Mark START adopts the video's 2 existing rallies", nVals(), 2)
+  live('text_input', 4, 3):set_text("11")        -- End (s); Start was set to 10.000 by mark_start
+  save_rally()
+  local hv = io.open(VIDEO_CSV, "r"); local vcsv = hv and hv:read("*a") or ""; if hv then hv:close() end
+  ok("new rally #3 written to <video>.rallies.csv", vcsv:find("\n3,", 1, true) ~= nil)
+  local hh = io.open(CSV, "r"); local home = hh and hh:read("*a") or ""; if hh then hh:close() end
+  ok("home fallback CSV was never written", home == "")
+  MEDIA_URI = nil; os.remove(VIDEO_CSV); os.remove(CSV)
 end
 
 --------------------------------------------------------------------------------

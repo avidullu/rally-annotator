@@ -59,9 +59,11 @@ resolved). Re-opening the extension **continues** rally numbering from the exist
 
 **Resuming a half-finished video:** labels are saved to that CSV as you go. Open the **same video** and enable the
 extension and it **reloads your existing rallies** (shown in the Recent list) and continues numbering — so you can
-stop and pick up later. Easiest flow: **open the video first, then enable the extension.** If you switch videos with
-the dialog already open, click **Refresh** to point at the current video and load its rallies. (Playback *position*
-isn't restored — scrub to where you stopped.)
+stop and pick up later. Easiest flow: **open the video first, then enable the extension.** If you enable it *before*
+the video is loaded, that's fine too — the moment you click **Mark START** (the video is playing by then) the tool
+switches to that video's own `<video-stem>.rallies.csv` and loads any rallies already saved for it, so nothing is
+written to the home-dir fallback by mistake. If you switch videos with the dialog already open, click **Refresh** to
+point at the current video and load its rallies. (Playback *position* isn't restored — scrub to where you stopped.)
 
 > **Where's the help / "About" text?** The empty *"About …lua"* box under **Tools → Plugins and extensions →
 > Add-ons** is VLC's own add-on info dialog; its body ("Lua script") is a constant baked into VLC and **can't be
