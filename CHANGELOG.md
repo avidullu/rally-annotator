@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.6.2 — 2026-06-18
+- **Fix (data safety on resume): rallies could be written to `~/rally_labels.csv` instead of next to the video.**
+  `out_path` was resolved **once**, when the extension was enabled. If the video wasn't loaded at that instant
+  (extension enabled before the video, or VLC still opening it), `current_media_path()` returned `nil` and the path
+  fell back to the home dir — so labels were saved there, and on **pause/restart** the video's own
+  `<video>.rallies.csv` was never reloaded, making prior rallies look "lost". Because producing a timestamp requires
+  the video to be playing, the tool now **adopts `<video>.rallies.csv` lazily on the first Mark START / Save**
+  (loading any rallies already saved for that video) instead of relying on enable-time resolution. The initial
+  status now says so when no video is detected yet. Window title → **`Rally Annotator v1.6.2`**. Regression test:
+  enable with no media, then "play" a video and Mark START → asserts the existing rallies are adopted, the new
+  rally lands in `<video>.rallies.csv`, and the home fallback is never written. Suite now **53 assertions**.
+
 ## v1.6.1 — 2026-06-18
 - **Fix: the Recent rallies list hid the oldest rallies.** It was capped to the most recent 12 rows, so once a
   video had 13+ rallies the earliest ones (e.g. **#1**) silently dropped off the list — you couldn't see their

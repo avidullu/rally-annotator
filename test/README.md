@@ -53,6 +53,7 @@ Why 5.1 specifically: it's the interpreter VLC 3.x embeds, so the test's syntax/
 - **Reason field** — defaults to `unknown`, resets after every save, supports the same reason on consecutive rallies, and a no-pick save records `unknown`.
 - **Shots field** — the optional `shots_count` is written when entered, left blank when not, clears after each save, and is reloaded by **Edit selected** (and the edit rewrites it).
 - **Recent list** — loading a 13-rally CSV lists **all** of them (oldest first, newest last), with no "last N" cap hiding the earliest rallies.
+- **Resume / CSV adoption** — enabling with no media (home fallback) then "playing" a video and clicking **Mark START** adopts `<video>.rallies.csv`, loads the rallies already saved for it, writes new ones there, and never touches the home fallback.
 - **Numbering** — the "Next rally #" field auto-advances to the next free number, refuses a duplicate, and re-syncs after Undo so removing a rally leaves no gap.
 - **CSV output** — the bytes actually written are checked (6-column header + rows + the shots column + that an undone rally is absent).
 - **Playback** — the single **Play / Pause** toggle branches on `vlc.playlist.status()` so it never flips the wrong way (and starts fresh from stopped), and seek does relative ± with a clamp at 0.
