@@ -1,4 +1,4 @@
---[[ rally_annotator.lua  --  VLC Lua EXTENSION (v1.6)
+--[[ rally_annotator.lua  --  VLC Lua EXTENSION (v1.6.1)
 
   Rally Annotator for NET-SEPARATED RACQUET SPORTS
   (badminton · tennis · table tennis · pickleball · padel)
@@ -10,6 +10,11 @@
 
   Output CSV columns (times in decimal SECONDS):
       rally_number,start_time,end_time,ending_reason,sport,shots_count
+
+  WHAT'S NEW IN v1.6.1
+    - Fix: the Recent rallies list now shows EVERY rally (it scrolls), not just
+      the most recent 12 -- so the oldest rallies (e.g. #1) are no longer hidden
+      and can still be selected for Edit/Delete.
 
   WHAT'S NEW IN v1.6
     - Playback is now a single PLAY / PAUSE toggle (was separate Play/Resume +
@@ -60,7 +65,7 @@
 --------------------------------------------------------------------------------
 -- Extension registration
 --------------------------------------------------------------------------------
-local VERSION = "1.6"
+local VERSION = "1.6.1"
 
 function descriptor()
   return {
@@ -400,15 +405,14 @@ local function rebuild_sport_selected(sel)
   end
 end
 
--- Repaint the recent-rallies list (last 12 rows).
+-- Repaint the recent-rallies list with EVERY rally (oldest first). The box is a
+-- fixed-height, scrollable list, so we show the full history instead of a window --
+-- a "last 12" cap used to hide the oldest rallies (e.g. #1 once you had 13+), which
+-- also made them impossible to select for Edit/Delete.
 local function refresh_list()
   if not w_list then return end
   w_list:clear()
-  local total = #rows
-  local starti = total - 11
-  if starti < 1 then starti = 1 end
-  for i = starti, total do
-    local r = rows[i]
+  for _, r in ipairs(rows) do
     local label = string.format("#%d   %s -> %s   [%s, %s]", r.n, fmt_clock(r.s), fmt_clock(r.e), r.reason, r.sport)
     if r.shots ~= nil then label = label .. string.format("   %s shots", tostring(r.shots)) end
     w_list:add_value(label, r.n)

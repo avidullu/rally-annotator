@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.6.1 — 2026-06-18
+- **Fix: the Recent rallies list hid the oldest rallies.** It was capped to the most recent 12 rows, so once a
+  video had 13+ rallies the earliest ones (e.g. **#1**) silently dropped off the list — you couldn't see their
+  start/end times or select them for **Edit selected** / **Delete selected**. The list now shows **every** rally
+  (oldest first); the box scrolls. Window title bumps to **`Rally Annotator v1.6.1`**. Regression test added (loads a
+  13-rally CSV and asserts the list shows all 13 with #1 first) — suite now at **49 assertions**.
+
 ## v1.6 — 2026-06-13
 - **Single Play / Pause toggle.** The separate **Play / Resume** and **Pause** buttons are merged into one
   **Play / Pause** button, so the playback row is now just **Back 5s · Play / Pause · Fwd 5s** (3 buttons). The

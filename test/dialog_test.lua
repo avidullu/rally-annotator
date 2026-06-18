@@ -92,7 +92,7 @@ local function ok(name, cond) eq(name, cond and true or false, true) end
 --------------------------------------------------------------------------------
 dofile(EXT)
 ok("descriptor() returns a title", descriptor().title ~= nil)
-eq("descriptor version", descriptor().version, "1.6")
+eq("descriptor version", descriptor().version, "1.6.1")
 activate()
 local d = DIALOG
 ok("dialog was created", d ~= nil)
@@ -271,6 +271,24 @@ seek_back();  eq("Back 5s from 30s -> 25s", PB.time_us, 25 * 1000000)
 seek_fwd();   eq("Fwd 5s from 25s -> 30s", PB.time_us, 30 * 1000000)
 PB.time_us = 2 * 1000000; seek_back(); eq("Back 5s from 2s clamps to 0", PB.time_us, 0)
 PB.state = "stopped"; play_pause(); eq("Play/Pause from stopped -> playing", PB.state, "playing")
+
+--------------------------------------------------------------------------------
+-- Recent list shows EVERY rally, oldest first (regression: a "last 12" cap used to
+-- hide the oldest rallies once there were 13+, so #1 was unselectable for Edit/Delete).
+--------------------------------------------------------------------------------
+do
+  local f = io.open(CSV, "w")
+  f:write("rally_number,start_time,end_time,ending_reason,sport,shots_count\n")
+  for n = 1, 13 do f:write(string.format("%d,%d.000,%d.000,winner,badminton,\n", n, n, n + 1)) end
+  f:close()
+  activate()                                  -- rebuild the dialog + list from the 13-row CSV
+  local L; for _, w in ipairs(DIALOG.widgets) do if w.kind == 'list' and not w.deleted then L = w end end
+  ok("recent list present after reload", L ~= nil)
+  eq("recent list shows all 13 rallies (no cap)", #L.values, 13)
+  eq("oldest rally #1 is the first row", L.values[1] and L.values[1].text:match("^#(%d+)"), "1")
+  eq("newest rally #13 is the last row", L.values[#L.values] and L.values[#L.values].text:match("^#(%d+)"), "13")
+  os.remove(CSV)
+end
 
 --------------------------------------------------------------------------------
 print(string.format("\n%d passed, %d failed", pass, fail))
