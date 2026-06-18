@@ -1,4 +1,4 @@
---[[ rally_annotator.lua  --  VLC Lua EXTENSION (v1.6.3)
+--[[ rally_annotator.lua  --  VLC Lua EXTENSION (v1.6.4)
 
   Rally Annotator for NET-SEPARATED RACQUET SPORTS
   (badminton · tennis · table tennis · pickleball · padel)
@@ -10,6 +10,13 @@
 
   Output CSV columns (times in decimal SECONDS):
       rally_number,start_time,end_time,ending_reason,sport,shots_count
+
+  WHAT'S NEW IN v1.6.4
+    - Guard against silently losing unsaved work: once a rally is fully marked
+      (START + END) but not yet saved, clicking Mark START (new rally) or Edit
+      selected is REFUSED with a prompt to Save Rally or Undo last first.
+    - While editing an existing rally, the Mark buttons relabel to
+      "Re-mark START/END (#N)" so it's obvious they change THAT rally, not a new one.
 
   WHAT'S NEW IN v1.6.3
     - The version now shows next to the plugin name in VLC's "Active Extensions"
@@ -78,7 +85,7 @@
 --------------------------------------------------------------------------------
 -- Extension registration
 --------------------------------------------------------------------------------
-local VERSION = "1.6.3"
+local VERSION = "1.6.4"
 
 function descriptor()
   return {
@@ -171,6 +178,8 @@ local w_start           -- start-time text input (editable seconds)
 local w_end             -- end-time text input (editable seconds)
 local w_list            -- recent-rallies list widget
 local w_save            -- "Save Rally" / "Save changes" button (relabeled by state)
+local w_mark_start      -- "Mark START" button (relabeled "Re-mark START (#N)" while editing)
+local w_mark_end        -- "Mark END" button (relabeled "Re-mark END (#N)" while editing)
 local w_undo            -- "Undo last" button (relabeled to show which row it removes)
 local w_next            -- "Next rally #" text input (lets you resume numbering anywhere)
 local w_shots           -- "Number of shots" text input (optional shots_count per rally)
@@ -350,6 +359,13 @@ local function get_shots()
   return math.floor(v)
 end
 
+-- True when a fresh rally is fully marked (both START and END) but NOT yet saved --
+-- i.e. there is unsaved work in the fields. Guards against silently discarding it when
+-- the user starts a new rally (Mark START) or jumps to editing another (Edit selected).
+local function is_armed()
+  return mode == "new" and get_field_num(w_start) ~= nil and get_field_num(w_end) ~= nil
+end
+
 -- The number the NEXT new rally will get. Defaults to next_rally_number(), but the
 -- user can type any value into the "Next rally #" field to resume/insert anywhere.
 local function planned_next_number()
@@ -454,6 +470,18 @@ local function refresh_buttons()
       else
         w_save:set_text("Save Rally")
       end
+    end
+  end
+  -- While editing, the Mark buttons re-mark the EDITED rally's times (not a new one),
+  -- so relabel them to make that unmissable -- a forgotten edit-mode is how you'd
+  -- accidentally overwrite an existing rally thinking you were creating a new one.
+  if w_mark_start and w_mark_end then
+    if mode == "edit" and edit_index and rows[edit_index] then
+      w_mark_start:set_text(string.format("Re-mark START (#%d)", rows[edit_index].n))
+      w_mark_end:set_text(string.format("Re-mark END (#%d)", rows[edit_index].n))
+    else
+      w_mark_start:set_text("Mark START")
+      w_mark_end:set_text("Mark END")
     end
   end
   if w_undo then
@@ -580,6 +608,11 @@ end
 function mark_start()
   local t = now_seconds()
   if not t then set_status("No media playing -- cannot mark START."); return end
+  if is_armed() then
+    set_status("You have an UNSAVED rally (START -> END). Click 'Save Rally' to keep it, or 'Undo last' to "
+      .. "clear it, before marking a new START. (You can also edit the Start field by hand.)")
+    return
+  end
   adopt_current_video_csv()   -- video is playing now: make sure we're on its CSV, not the fallback
   w_start:set_text(string.format("%.3f", t))
   refresh_buttons()
@@ -638,6 +671,11 @@ function save_rally()
 end
 
 function edit_selected()
+  if is_armed() then
+    set_status("Finish the current rally ('Save Rally') or clear it ('Undo last') before editing another "
+      .. "-- your unsaved START -> END would be lost.")
+    return
+  end
   local n = selected_rally_number()
   if not n then set_status("Pick a rally in the Recent list first, then Edit selected."); return end
   local idx = index_of_rally(n)
@@ -761,8 +799,8 @@ local function create_dialog()
   d:add_label("Ending reason:", 3, 5, 1, 1)   -- labels the reason dropdown directly below it
 
   -- Per-rally commit row, left-to-right: Mark START -> Mark END -> reason -> Save.
-  d:add_button("Mark START", mark_start, 1, 6, 1, 1)
-  d:add_button("Mark END",   mark_end,   2, 6, 1, 1)
+  w_mark_start = d:add_button("Mark START", mark_start, 1, 6, 1, 1)
+  w_mark_end   = d:add_button("Mark END",   mark_end,   2, 6, 1, 1)
   rebuild_reason_default()                     -- creates w_reason at (3,6,1,1), under its label
   w_save = d:add_button("Save Rally", save_rally, 4, 6, 1, 1)
 

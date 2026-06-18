@@ -95,7 +95,7 @@ local function ok(name, cond) eq(name, cond and true or false, true) end
 --------------------------------------------------------------------------------
 dofile(EXT)
 ok("descriptor() returns a title", descriptor().title ~= nil)
-eq("descriptor version", descriptor().version, "1.6.3")
+eq("descriptor version", descriptor().version, "1.6.4")
 -- the title carries the version so VLC's "Active Extensions" list (which shows the
 -- title verbatim) displays it next to the plugin name -- and stays in sync, no drift.
 eq("descriptor title carries the version", descriptor().title, "Rally Annotator v" .. descriptor().version)
@@ -331,6 +331,64 @@ do
   local hh = io.open(CSV, "r"); local home = hh and hh:read("*a") or ""; if hh then hh:close() end
   ok("home fallback CSV was never written", home == "")
   MEDIA_URI = nil; os.remove(VIDEO_CSV); os.remove(CSV)
+end
+
+--------------------------------------------------------------------------------
+-- Guard: a fully-marked-but-unsaved rally (START + END) must not be silently lost when
+-- the user starts a new rally (Mark START) or jumps to editing another (Edit selected).
+--------------------------------------------------------------------------------
+do
+  os.remove(CSV)
+  MEDIA_URI = nil; PB.state = "playing"; PB.time_us = 200 * 1000000
+  activate()
+  local function win(kind, c, r) local f; for _, x in ipairs(DIALOG.widgets) do if x.kind==kind and x.col==c and x.row==r and not x.deleted then f=x end end; return f end
+  local function listw() local L; for _, x in ipairs(DIALOG.widgets) do if x.kind=='list' and not x.deleted then L=x end end; return L end
+
+  -- save one rally so the Recent list has a row to (attempt to) edit
+  win('text_input',2,3):set_text("1.000"); win('text_input',4,3):set_text("2.000"); save_rally()
+  -- arm a fresh rally: START + END filled, unsaved
+  win('text_input',2,3):set_text("100.000"); win('text_input',4,3):set_text("110.000")
+
+  mark_start()   -- would overwrite START to 200.000 -> must be REFUSED, fields untouched
+  eq("armed: Mark START refused (START unchanged)", win('text_input',2,3):get_text(), "100.000")
+  eq("armed: still a new rally (not pushed to edit)", win('text_input',4,3):get_text(), "110.000")
+
+  listw().selection = { [1] = "row #1" }
+  edit_selected() -- would load #1 over the armed marks -> must be REFUSED
+  eq("armed: Edit selected refused (START still the armed 100.000)", win('text_input',2,3):get_text(), "100.000")
+
+  undo_last()     -- the documented escape hatch: clears the in-progress mark
+  eq("after Undo last, START cleared", win('text_input',2,3):get_text(), "")
+  mark_start()    -- no longer armed -> now allowed
+  eq("after clearing, Mark START works (200.000)", win('text_input',2,3):get_text(), "200.000")
+  os.remove(CSV)
+end
+
+--------------------------------------------------------------------------------
+-- Edit-mode prominence: the Mark buttons relabel to "Re-mark START/END (#N)" so it is
+-- obvious they change the EDITED rally, not a new one; they revert when the edit ends.
+--------------------------------------------------------------------------------
+do
+  os.remove(CSV)
+  MEDIA_URI = nil; PB.state = "stopped"
+  activate()
+  local function markBtn(cb) for _, x in ipairs(DIALOG.widgets) do if x.kind=='button' and x.cb==cb and not x.deleted then return x end end end
+  local function w23(c,r) local f; for _, x in ipairs(DIALOG.widgets) do if x.kind=='text_input' and x.col==c and x.row==r and not x.deleted then f=x end end; return f end
+  local function listw() local L; for _, x in ipairs(DIALOG.widgets) do if x.kind=='list' and not x.deleted then L=x end end; return L end
+
+  w23(2,3):set_text("1.000"); w23(4,3):set_text("2.000"); save_rally()
+  eq("pristine Mark START label", markBtn(mark_start).text, "Mark START")
+  eq("pristine Mark END label",   markBtn(mark_end).text,   "Mark END")
+
+  listw().selection = { [1] = "row #1" }
+  edit_selected()
+  eq("editing relabels Mark START", markBtn(mark_start).text, "Re-mark START (#1)")
+  eq("editing relabels Mark END",   markBtn(mark_end).text,   "Re-mark END (#1)")
+
+  undo_last()   -- cancels the edit
+  eq("after cancel Mark START label restored", markBtn(mark_start).text, "Mark START")
+  eq("after cancel Mark END label restored",   markBtn(mark_end).text,   "Mark END")
+  os.remove(CSV)
 end
 
 --------------------------------------------------------------------------------

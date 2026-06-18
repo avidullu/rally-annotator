@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.6.4 — 2026-06-18
+- **Guard unsaved work against silent loss (golden-data safety).** Once a rally is fully marked (**START + END**)
+  but not yet saved, the two ways you could *accidentally* throw it away are now blocked with a clear prompt instead
+  of silently discarding it:
+  - **Mark START** (starting a new rally) is refused — "Save Rally to keep it, or Undo last to clear it" — so a new
+    mark can't overwrite an unsaved one.
+  - **Edit selected** is refused for the same reason (loading another row would replace the unsaved START→END).
+  (The Start/End fields stay editable by hand, and **Undo last** is the explicit one-click "clear the mark" escape.)
+- **Edit mode is now unmissable.** While editing an existing rally, the Mark buttons relabel to
+  **"Re-mark START (#N)" / "Re-mark END (#N)"**, so it's obvious they change *that* rally rather than creating a new
+  one (they revert to "Mark START"/"Mark END" when the edit is saved or cancelled).
+- Regression tests for both guards (refusal + the relabel/revert) — suite now **65 assertions**.
+
 ## v1.6.3 — 2026-06-18
 - **The version now shows next to the plugin in VLC's "Active Extensions" list** (Tools → Plugins and extensions →
   Active Extensions) — e.g. **`Rally Annotator v1.6.3`** — matching how VLsub shows `VLsub 0.11.1`. VLC renders the
