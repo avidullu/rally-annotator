@@ -8,6 +8,12 @@
 // none of Spanish's 3-form-plural wrinkle. See docs/LOCALIZATION.md.
 
 import en from "./locales/en/common.json";
+import kn from "./locales/kn/common.json";
+import hi from "./locales/hi/common.json";
+import te from "./locales/te/common.json";
+import es from "./locales/es/common.json";
+import da from "./locales/da/common.json";
+import id from "./locales/id/common.json";
 
 export const SUPPORTED_LOCALES = ["en", "kn", "hi", "es", "da", "id", "te"] as const;
 export type Locale = (typeof SUPPORTED_LOCALES)[number];
@@ -30,8 +36,18 @@ export const NON_LATIN: ReadonlySet<Locale> = new Set<Locale>(["kn", "hi", "te"]
 type Catalog = Record<string, string>;
 
 // Registered catalogs. `en` is the source of truth; the six translated catalogs are
-// registered as their common.json files land (PR B). An unregistered locale falls back to en.
-const CATALOGS: Partial<Record<Locale, Catalog>> = { en: en as unknown as Catalog };
+// machine drafts pending native review (see each file's _meta). An unregistered locale,
+// or any key missing from a catalog, falls back to en.
+const C = (j: unknown) => j as unknown as Catalog;
+const CATALOGS: Partial<Record<Locale, Catalog>> = {
+  en: C(en),
+  kn: C(kn),
+  hi: C(hi),
+  te: C(te),
+  es: C(es),
+  da: C(da),
+  id: C(id),
+};
 
 export function registerCatalog(locale: Locale, catalog: Catalog): void {
   CATALOGS[locale] = catalog;

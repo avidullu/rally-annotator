@@ -49,7 +49,8 @@ function tMsg(m: Msg): string {
 
 const STYLE = `
 :host { all: initial; }
-* { box-sizing: border-box; font-family: system-ui, sans-serif; }
+* { box-sizing: border-box; font-family: system-ui, "Noto Sans", "Noto Sans Devanagari",
+  "Noto Sans Kannada", "Noto Sans Telugu", "Nirmala UI", sans-serif; }
 .card {
   position: fixed; top: 16px; right: 16px; width: 340px; z-index: 2147483647;
   background: #1e1f22; color: #e6e6e6; border: 1px solid #444; border-radius: 8px;

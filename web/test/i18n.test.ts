@@ -25,7 +25,12 @@ describe("t() shim", () => {
     expect(t("does.not.exist")).toBe("does.not.exist");
   });
   it("falls back to en for an unregistered locale", () => {
-    expect(t("btn.saveRally", undefined, "te")).toBe("Save Rally");
+    expect(t("btn.saveRally", undefined, "zz" as never)).toBe("Save Rally");
+  });
+  it("uses the registered translation for a known locale", () => {
+    const hi = t("btn.markStart", undefined, "hi");
+    expect(hi.length).toBeGreaterThan(0);
+    expect(hi).not.toBe("Mark START"); // actually translated, not an en passthrough
   });
 });
 
@@ -50,6 +55,10 @@ describe("locale state + negotiation", () => {
 describe("catalog integrity", () => {
   it("has a display label for every supported locale", () => {
     for (const l of SUPPORTED_LOCALES) expect(LOCALE_LABELS[l]).toBeTruthy();
+  });
+
+  it("registers a catalog for every supported locale", () => {
+    expect(new Set(registeredLocales())).toEqual(new Set(SUPPORTED_LOCALES));
   });
 
   it("key-parity: every registered locale defines exactly the en key set", () => {
