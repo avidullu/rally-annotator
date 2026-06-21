@@ -34,6 +34,11 @@ npm run e2e         # Playwright loads the built extension in real Chromium (rec
 All four must pass locally; CI (`.github/workflows/web-ci.yml`) runs them on every change under `web/`
 and uploads the E2E **screencast** + coverage as artifacts.
 
+**Localization (i18n):** when touching localized UI, every locale catalog must define exactly the `en`
+key set (**key-parity**) and no user-facing literal may bypass `t()` (**no-bare-strings**) — both are
+merge-blocking. See [docs/LOCALIZATION.md](docs/LOCALIZATION.md) for the locale set, catalog format, and
+the AI-draft → native-review process.
+
 ### VLC plugin (`vlc/`)
 ```bash
 luac5.1 -p vlc/rally_annotator.lua   # syntax check (the scan-time error class that breaks loading)

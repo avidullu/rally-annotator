@@ -125,6 +125,14 @@ there is no Developer ID direct-install. They require a Mac + `xcrun safari-web-
 **Consequence.** Safari cannot be built or E2E-tested on Windows or default CI runners; it is documented,
 not implemented.
 
+### LD-12 — Localization (i18n) mirrors Khelsutra
+**Decision.** The panel UI is localized into Khelsutra's locales **+ Telugu** (`en, kn, hi, es, da, id,
+te`) via a dependency-free `t()` shim over a shared `common.json` catalog, mirroring Khelsutra's i18n
+foundation (keys-not-prose, ICU-lite, always-fall-back-to-`en`, key-parity + no-bare-strings CI gates,
+OFL Noto fonts, AI-draft → native-review). The reason/sport **values** and CSV header stay canonical
+English (LD-3 byte-compatibility is preserved across all languages). Full design + locked decisions:
+[../docs/LOCALIZATION.md](../docs/LOCALIZATION.md).
+
 ## Deferred / north star (not locked — tracked work)
 
 - **LD-10 — YouTube/Vimeo embed handler.** Inject into the provider frame (`all_frames` + host
