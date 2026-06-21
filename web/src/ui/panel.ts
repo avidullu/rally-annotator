@@ -1,20 +1,21 @@
 // In-page annotation panel — the browser analogue of the VLC dialog. Rendered into an
 // OPEN Shadow DOM so the host page's CSS can't bleed in (and vice-versa) while still
-// being reachable by automation/devtools (open vs closed only affects JS visibility of
-// the root, not style encapsulation; "closed" is not a real security boundary). Reproduces
-// the v1.6.4 widget set and wires it to the pure Annotator state machine and the video
-// handler. Draggable; re-parents into the fullscreen element so it survives fullscreen.
+// being reachable by automation/devtools ("closed" is not a real security boundary).
+// Every user-facing string goes through the i18n shim t() (keys-not-prose); reason/sport
+// VALUES stay canonical (written to the CSV) — only their display labels are translated.
 
-import { Annotator, SPORTS, REASON_OPTIONS } from "../state/annotator";
+import { Annotator, SPORTS, REASON_OPTIONS, type Msg } from "../state/annotator";
 import type { DirectVideoHandler } from "../video/directVideo";
 import type { VideoIdentity } from "../persist/store";
 import { VERSION } from "../version";
+import { t, getLocale, setLocale, SUPPORTED_LOCALES, LOCALE_LABELS, type Locale } from "../i18n";
 
 export interface PanelDeps {
   annotator: Annotator;
   video: DirectVideoHandler;
   identity: VideoIdentity;
   download: (csv: string) => void;
+  onLocaleChange?: (locale: Locale) => void; // optional: persist the choice (content script wires this)
 }
 
 export interface PanelHandle {
@@ -33,6 +34,17 @@ function fmtClock(s: number | null): string {
 
 function esc(t: string): string {
   return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// Translate a Msg, mapping canonical reason/sport params to their display labels.
+function tMsg(m: Msg): string {
+  let p = m.params;
+  if (p && (typeof p.reason === "string" || typeof p.sport === "string")) {
+    p = { ...p };
+    if (typeof p.reason === "string") p.reason = t("reason." + p.reason);
+    if (typeof p.sport === "string") p.sport = t("sport." + p.sport);
+  }
+  return t(m.key, p);
 }
 
 const STYLE = `
@@ -74,23 +86,6 @@ button.primary:hover { background: #38805c; }
 .mini { font-size: 11px; color: #8b90a0; }
 `;
 
-const HELP_HTML = `
-<b>Rally Annotator (web) — how to use</b><br>
-1. Pick the <b>Sport</b> (stays set).<br>
-2. <b>Back 5s / Play&nbsp;/&nbsp;Pause / Fwd 5s</b> drive the page's video from here.<br>
-3. At a rally's start click <b>Mark START</b> (pause/scrub first for accuracy); at its end
-click <b>Mark END</b>. Fine-tune the Start/End seconds by editing the fields.<br>
-4. Choose the <b>Ending reason</b> (or leave it <b>unknown</b>), optionally type a
-<b>Number of shots</b>, then <b>Save Rally</b> — the full CSV downloads.<br>
-5. Reason &amp; shots RESET after each save (never silently reused); Sport stays.<br>
-6. <b>Recent rallies</b>: click a row, then <b>Edit</b> / <b>Delete</b>. <b>Undo last</b>
-removes the most recent row, clears an in-progress mark, or cancels an edit.<br>
-7. Rallies autosave to extension storage keyed to this video, so reloading the page resumes
-numbering. The CSV lands in your <b>Downloads</b> folder (it can't be written next to a web video).<br>
-<br><b>Reasons:</b> winner · forced_error · unforced_error · service_fault · let · other ·
-unknown (default). All but <i>winner</i> are charged to the side that lost the rally.
-`;
-
 function h<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   props: Partial<HTMLElementTagNameMap[K]> & { class?: string } = {},
@@ -117,8 +112,8 @@ export function mountPanel(deps: PanelDeps): PanelHandle {
   root.append(card);
 
   // ---- header (drag handle) ----
-  const titleEl = h("span", { class: "t", textContent: `🏸 Rally Annotator v${VERSION}` });
-  const helpBtn = h("button", { textContent: "Help", title: "Toggle help" });
+  const titleEl = h("span", { class: "t" });
+  const helpBtn = h("button", { title: "Toggle help" });
   const hideBtn = h("button", { textContent: "—", title: "Hide panel" });
   const hdr = h("div", { class: "hdr" }, titleEl, helpBtn, hideBtn);
   card.append(hdr);
@@ -126,45 +121,50 @@ export function mountPanel(deps: PanelDeps): PanelHandle {
   const body = h("div", { class: "body" });
   card.append(body);
 
+  // ---- language ----
+  const langLabel = h("label");
+  const langSel = h("select", { name: "language" }) as HTMLSelectElement;
+  for (const l of SUPPORTED_LOCALES) langSel.append(h("option", { value: l, textContent: LOCALE_LABELS[l] }));
+  langSel.value = getLocale();
+  body.append(h("div", { class: "row" }, langLabel, langSel));
+
   // ---- sport ----
-  const sportSel = h("select", { title: "Sport", name: "sport" }) as HTMLSelectElement;
-  for (const s of SPORTS) sportSel.append(h("option", { value: s, textContent: s }));
+  const sportLabel = h("label");
+  const sportSel = h("select", { name: "sport" }) as HTMLSelectElement;
+  for (const s of SPORTS) sportSel.append(h("option", { value: s }));
   sportSel.value = a.sport;
-  body.append(h("div", { class: "row" }, h("label", { textContent: "Sport:" }), sportSel));
+  body.append(h("div", { class: "row" }, sportLabel, sportSel));
 
   // ---- playback ----
-  const backBtn = h("button", { textContent: "« Back 5s" });
-  const playBtn = h("button", { textContent: "Play / Pause" });
-  const fwdBtn = h("button", { textContent: "Fwd 5s »" });
+  const backBtn = h("button");
+  const playBtn = h("button");
+  const fwdBtn = h("button");
   body.append(h("div", { class: "row" }, backBtn, playBtn, fwdBtn));
 
   // ---- start / end ----
-  const startIn = h("input", { placeholder: "start s" }) as HTMLInputElement;
-  const endIn = h("input", { placeholder: "end s" }) as HTMLInputElement;
-  body.append(
-    h("div", { class: "row" },
-      h("label", { textContent: "Start:" }), startIn,
-      h("label", { textContent: "End:" }), endIn)
-  );
+  const startLabel = h("label");
+  const startIn = h("input", { name: "start" }) as HTMLInputElement;
+  const endLabel = h("label");
+  const endIn = h("input", { name: "end" }) as HTMLInputElement;
+  body.append(h("div", { class: "row" }, startLabel, startIn, endLabel, endIn));
 
   // ---- next # / shots ----
-  const nextIn = h("input", { placeholder: "next #" }) as HTMLInputElement;
-  const shotsIn = h("input", { placeholder: "shots" }) as HTMLInputElement;
-  body.append(
-    h("div", { class: "row" },
-      h("label", { textContent: "Next #:" }), nextIn,
-      h("label", { textContent: "Shots:" }), shotsIn)
-  );
+  const nextLabel = h("label");
+  const nextIn = h("input", { name: "next" }) as HTMLInputElement;
+  const shotsLabel = h("label");
+  const shotsIn = h("input", { name: "shots" }) as HTMLInputElement;
+  body.append(h("div", { class: "row" }, nextLabel, nextIn, shotsLabel, shotsIn));
 
   // ---- reason ----
-  const reasonSel = h("select", { title: "Ending reason", name: "reason" }) as HTMLSelectElement;
-  for (const r of REASON_OPTIONS) reasonSel.append(h("option", { value: r, textContent: r }));
-  body.append(h("div", { class: "row" }, h("label", { textContent: "Reason:" }), reasonSel));
+  const reasonLabel = h("label");
+  const reasonSel = h("select", { name: "reason" }) as HTMLSelectElement;
+  for (const r of REASON_OPTIONS) reasonSel.append(h("option", { value: r }));
+  body.append(h("div", { class: "row" }, reasonLabel, reasonSel));
 
   // ---- mark / save ----
-  const markStartBtn = h("button", { textContent: "Mark START" });
-  const markEndBtn = h("button", { textContent: "Mark END" });
-  const saveBtn = h("button", { class: "primary", textContent: "Save Rally" });
+  const markStartBtn = h("button");
+  const markEndBtn = h("button");
+  const saveBtn = h("button", { class: "primary" });
   body.append(h("div", { class: "grid2" }, markStartBtn, markEndBtn));
   body.append(h("div", { class: "row" }, saveBtn));
 
@@ -174,32 +174,60 @@ export function mountPanel(deps: PanelDeps): PanelHandle {
 
   // ---- help (hidden by default) ----
   const help = h("div", { class: "help" });
-  help.innerHTML = HELP_HTML;
   help.style.display = "none";
   body.append(help);
 
   // ---- recent list ----
-  body.append(h("div", { class: "mini", textContent: "Recent rallies (click one, then Edit/Delete):" }));
+  const recentLabel = h("div", { class: "mini" });
+  body.append(recentLabel);
   const list = h("div", { class: "list" });
   body.append(list);
 
   // ---- actions ----
-  const editBtn = h("button", { textContent: "Edit" });
-  const delBtn = h("button", { textContent: "Delete" });
-  const undoBtn = h("button", { textContent: "Undo last" });
-  const refreshBtn = h("button", { textContent: "Refresh" });
-  const dlBtn = h("button", { textContent: "Download CSV" });
+  const editBtn = h("button");
+  const delBtn = h("button");
+  const undoBtn = h("button");
+  const refreshBtn = h("button");
+  const dlBtn = h("button");
   body.append(h("div", { class: "grid2" }, editBtn, delBtn));
   body.append(h("div", { class: "grid2" }, undoBtn, refreshBtn));
   body.append(h("div", { class: "row" }, dlBtn));
 
   // ---- state ----
   let selectedN: number | null = null;
-  let lastMsg = "Ready. Pick the Sport, then mark rallies. Click Help for usage.";
+  let lastMsg: Msg = { key: "status.ready" };
 
-  function setStatus(msg: string) {
-    lastMsg = msg;
+  function setStatus(m: Msg) {
+    lastMsg = m;
     render();
+  }
+
+  // Language-only text (static labels, option labels, placeholders, fixed buttons, help).
+  // Re-applied on mount and whenever the locale changes.
+  function applyI18n() {
+    titleEl.textContent = `🏸 ${t("panel.title")} v${VERSION}`;
+    langLabel.textContent = t("label.language");
+    sportLabel.textContent = t("label.sport");
+    for (const o of Array.from(sportSel.options)) o.textContent = t("sport." + o.value);
+    backBtn.textContent = t("btn.back5");
+    playBtn.textContent = t("btn.playPause");
+    fwdBtn.textContent = t("btn.fwd5");
+    startLabel.textContent = t("label.start");
+    endLabel.textContent = t("label.end");
+    nextLabel.textContent = t("label.next");
+    shotsLabel.textContent = t("label.shots");
+    startIn.placeholder = t("ph.start");
+    endIn.placeholder = t("ph.end");
+    nextIn.placeholder = t("ph.next");
+    shotsIn.placeholder = t("ph.shots");
+    reasonLabel.textContent = t("label.reason");
+    for (const o of Array.from(reasonSel.options)) o.textContent = t("reason." + o.value);
+    editBtn.textContent = t("btn.edit");
+    delBtn.textContent = t("btn.delete");
+    refreshBtn.textContent = t("btn.refresh");
+    dlBtn.textContent = t("btn.downloadCsv");
+    recentLabel.textContent = t("label.recent");
+    help.innerHTML = t("help.html");
   }
 
   function render() {
@@ -210,31 +238,39 @@ export function mountPanel(deps: PanelDeps): PanelHandle {
     shotsIn.value = a.shotsField;
     reasonSel.value = a.reason;
     sportSel.value = a.sport;
-    // labels
-    markStartBtn.textContent = a.markStartLabel();
-    markEndBtn.textContent = a.markEndLabel();
-    saveBtn.textContent = a.saveLabel();
-    undoBtn.textContent = a.undoLabel();
+    langSel.value = getLocale();
+    // state-dependent labels
+    markStartBtn.textContent = tMsg(a.markStartLabel());
+    markEndBtn.textContent = tMsg(a.markEndLabel());
+    saveBtn.textContent = tMsg(a.saveLabel());
+    undoBtn.textContent = tMsg(a.undoLabel());
+    helpBtn.textContent = help.style.display === "none" ? t("btn.help") : t("btn.hideHelp");
     // status
-    const modeLine =
-      a.mode === "edit" && a.editIndex != null && a.rows[a.editIndex]
-        ? `Mode: EDITING #${a.rows[a.editIndex].n} (Save changes / Undo cancels).`
-        : "Mode: new rally (Mark START, Mark END, reason, Save Rally).";
+    const editing = a.mode === "edit" && a.editIndex != null ? a.rows[a.editIndex] : null;
     const last = a.lastRow();
-    const lastLine = last
-      ? `Last row (Undo removes): #${last.n} ${esc(fmtClock(last.s))} → ${esc(fmtClock(last.e))} [${esc(last.reason)}]<br>`
-      : "";
+    const lines = [
+      tMsg(lastMsg),
+      editing ? t("status.modeEdit", { n: editing.n }) : t("status.modeNew"),
+    ];
+    if (last) {
+      lines.push(
+        tMsg({
+          key: "status.lastRow",
+          params: { n: last.n, s: fmtClock(last.s), e: fmtClock(last.e), reason: last.reason },
+        })
+      );
+    }
+    lines.push(t("status.footer", { now: fmtClock(video.now()), count: a.rows.length }));
     status.innerHTML =
-      `${esc(lastMsg)}<br>${esc(modeLine)}<br>${lastLine}` +
-      `Now: ${esc(fmtClock(video.now()))} &nbsp;|&nbsp; Rallies: ${a.rows.length}<br>` +
-      `<span class="mini">CSV → Downloads · key: ${esc(deps.identity.key)}</span>`;
+      lines.map(esc).join("<br>") +
+      `<br><span class="mini">${esc(t("status.csvLine", { key: deps.identity.key }))}</span>`;
     // list
     list.replaceChildren();
     for (const r of a.rows) {
-      const shotsTxt = r.shots != null ? `  ${r.shots} shots` : "";
+      const shotsTxt = r.shots != null ? `  ${r.shots} ${t("ph.shots")}` : "";
       const item = h("div", {
         class: "item" + (r.n === selectedN ? " sel" : ""),
-        textContent: `#${r.n}  ${fmtClock(r.s)} → ${fmtClock(r.e)}  [${r.reason}, ${r.sport}]${shotsTxt}`,
+        textContent: `#${r.n}  ${fmtClock(r.s)} → ${fmtClock(r.e)}  [${t("reason." + r.reason)}, ${t("sport." + r.sport)}]${shotsTxt}`,
       });
       item.addEventListener("click", () => {
         selectedN = r.n;
@@ -266,42 +302,51 @@ export function mountPanel(deps: PanelDeps): PanelHandle {
   sportSel.addEventListener("change", () => {
     a.sport = sportSel.value;
   });
-
-  backBtn.addEventListener("click", () => setStatus(video.seekBy(-5) ? "Seek -5s." : "No video to seek."));
-  fwdBtn.addEventListener("click", () => setStatus(video.seekBy(5) ? "Seek +5s." : "No video to seek."));
-  playBtn.addEventListener("click", () => {
-    const st = video.playPause();
-    setStatus(st === "playing" ? "Resumed." : st === "paused" ? "Paused." : "No video loaded.");
+  langSel.addEventListener("change", () => {
+    setLocale(langSel.value as Locale);
+    deps.onLocaleChange?.(getLocale());
+    applyI18n();
+    render();
   });
 
-  markStartBtn.addEventListener("click", () => setStatus(a.markStart(video.now()).status));
-  markEndBtn.addEventListener("click", () => setStatus(a.markEnd(video.now()).status));
+  backBtn.addEventListener("click", () =>
+    setStatus({ key: video.seekBy(-5) ? "status.seekBack" : "status.noVideoSeek" })
+  );
+  fwdBtn.addEventListener("click", () =>
+    setStatus({ key: video.seekBy(5) ? "status.seekFwd" : "status.noVideoSeek" })
+  );
+  playBtn.addEventListener("click", () => {
+    const st = video.playPause();
+    setStatus({ key: st === "playing" ? "status.resumed" : st === "paused" ? "status.paused" : "status.noVideoLoaded" });
+  });
+
+  markStartBtn.addEventListener("click", () => setStatus(a.markStart(video.now())));
+  markEndBtn.addEventListener("click", () => setStatus(a.markEnd(video.now())));
   saveBtn.addEventListener("click", () => {
     const res = a.saveRally();
     if (res.ok) download(a.toCSV()); // download the full CSV on each save (per design)
-    setStatus(res.status);
+    setStatus(res);
   });
 
-  editBtn.addEventListener("click", () => setStatus(a.editSelected(selectedN).status));
+  editBtn.addEventListener("click", () => setStatus(a.editSelected(selectedN)));
   delBtn.addEventListener("click", () => {
     const res = a.deleteSelected(selectedN);
     if (res.ok) selectedN = null;
-    setStatus(res.status + (res.ok ? "  (click Download CSV to refresh the file)" : ""));
+    setStatus(res);
   });
-  undoBtn.addEventListener("click", () => setStatus(a.undoLast().status));
+  undoBtn.addEventListener("click", () => setStatus(a.undoLast()));
   refreshBtn.addEventListener("click", () => {
     video.findActive();
-    setStatus(video.hasVideo() ? "Refreshed (video re-detected)." : "No video found on this page yet.");
+    setStatus({ key: video.hasVideo() ? "status.refreshedVideo" : "status.noVideoFound" });
   });
   dlBtn.addEventListener("click", () => {
     download(a.toCSV());
-    setStatus(`Downloaded CSV (${a.rows.length} rallies).`);
+    setStatus({ key: "status.downloaded", params: { count: a.rows.length } });
   });
 
   helpBtn.addEventListener("click", () => {
-    const showing = help.style.display !== "none";
-    help.style.display = showing ? "none" : "block";
-    helpBtn.textContent = showing ? "Help" : "Hide help";
+    help.style.display = help.style.display === "none" ? "block" : "none";
+    render();
   });
   hideBtn.addEventListener("click", () => api.toggle());
 
@@ -338,6 +383,7 @@ export function mountPanel(deps: PanelDeps): PanelHandle {
   document.addEventListener("fullscreenchange", onFs);
 
   document.body.append(host);
+  applyI18n();
   render();
 
   const api: PanelHandle = {

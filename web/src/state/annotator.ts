@@ -1,12 +1,11 @@
 // Annotator state machine — a faithful, provider-agnostic port of the pure logic
 // in vlc/rally_annotator.lua (the button callbacks + helpers, minus VLC widget I/O).
 //
-// The UI layer (closed-shadow-root panel) renders this state and forwards user
-// actions; the video layer supplies playback time in SECONDS (HTML5
-// video.currentTime is already seconds — no microsecond conversion as VLC needs);
-// the persist layer is injected as `persist` (writes the IndexedDB live store and
-// triggers the CSV download). Keeping this module pure makes it unit-testable
-// without a browser, mirroring test/dialog_test.lua.
+// Localizable by design: operations and button labels return message KEYS + params
+// (a `Msg`), never prose — the UI translates them via the i18n shim, so the state
+// machine stays pure and i18n-free (keys-not-prose; see docs/LOCALIZATION.md). The
+// reason/sport values it stores are canonical English (written verbatim to the CSV);
+// only their DISPLAY labels are translated, by the UI.
 
 import { RallyRow, serializeRows } from "./csv";
 
@@ -49,9 +48,15 @@ function fieldNum(text: string): number | null {
   return Number.isNaN(v) ? null : v;
 }
 
-export interface OpResult {
+// A translatable message: a catalog key + optional interpolation params. The UI renders
+// it with the i18n shim. `reason`/`sport` params hold canonical values; the UI maps them
+// to translated labels at render time (the CSV always keeps the canonical value).
+export interface Msg {
+  key: string;
+  params?: Record<string, string | number>;
+}
+export interface OpResult extends Msg {
   ok: boolean;
-  status: string;
 }
 
 export interface AnnotatorOpts {
@@ -131,37 +136,39 @@ export class Annotator {
     return this.rows.length ? this.rows[this.rows.length - 1] : null;
   }
 
-  // ---- button labels (port of refresh_buttons) ----
+  private editedRally(): RallyRow | null {
+    return this.mode === "edit" && this.editIndex != null ? (this.rows[this.editIndex] ?? null) : null;
+  }
 
-  saveLabel(): string {
-    if (this.mode === "edit" && this.editIndex != null && this.rows[this.editIndex])
-      return `Save changes (#${this.rows[this.editIndex].n})`;
+  // ---- button labels (port of refresh_buttons) -> translatable Msg ----
+
+  saveLabel(): Msg {
+    const r = this.editedRally();
+    if (r) return { key: "btn.saveChangesN", params: { n: r.n } };
     const s = fieldNum(this.startField);
     const e = fieldNum(this.endField);
-    if (s != null && e != null) return `Save Rally (#${this.plannedNextNumber()})`;
-    return "Save Rally";
+    if (s != null && e != null) return { key: "btn.saveRallyN", params: { n: this.plannedNextNumber() } };
+    return { key: "btn.saveRally" };
   }
 
-  markStartLabel(): string {
-    if (this.mode === "edit" && this.editIndex != null && this.rows[this.editIndex])
-      return `Re-mark START (#${this.rows[this.editIndex].n})`;
-    return "Mark START";
+  markStartLabel(): Msg {
+    const r = this.editedRally();
+    return r ? { key: "btn.reMarkStart", params: { n: r.n } } : { key: "btn.markStart" };
   }
 
-  markEndLabel(): string {
-    if (this.mode === "edit" && this.editIndex != null && this.rows[this.editIndex])
-      return `Re-mark END (#${this.rows[this.editIndex].n})`;
-    return "Mark END";
+  markEndLabel(): Msg {
+    const r = this.editedRally();
+    return r ? { key: "btn.reMarkEnd", params: { n: r.n } } : { key: "btn.markEnd" };
   }
 
-  undoLabel(): string {
-    if (this.mode === "edit") return "Undo last (cancel edit)";
+  undoLabel(): Msg {
+    if (this.mode === "edit") return { key: "btn.undoCancelEdit" };
     const s = fieldNum(this.startField);
     const e = fieldNum(this.endField);
-    if (s != null || e != null) return "Undo last (clear mark)";
+    if (s != null || e != null) return { key: "btn.undoClearMark" };
     const last = this.lastRow();
-    if (last) return `Undo last (#${last.n})`;
-    return "Undo last";
+    if (last) return { key: "btn.undoN", params: { n: last.n } };
+    return { key: "btn.undo" };
   }
 
   // ---- form reset: reason + shots are NON-STICKY; sport & nextField untouched ----
@@ -174,49 +181,32 @@ export class Annotator {
     this.reason = REASON_DEFAULT;
   }
 
-  // ---- operations (port of the button callbacks) ----
+  // ---- operations (port of the button callbacks) -> translatable OpResult ----
 
   markStart(now: number | null): OpResult {
-    if (now == null)
-      return { ok: false, status: "No media playing -- cannot mark START." };
-    if (this.isArmed())
-      return {
-        ok: false,
-        status:
-          "You have an UNSAVED rally (START -> END). Click 'Save Rally' to keep it, " +
-          "or 'Undo last' to clear it, before marking a new START.",
-      };
+    if (now == null) return { ok: false, key: "status.noMediaStart" };
+    if (this.isArmed()) return { ok: false, key: "status.unsavedGuard" };
     this.startField = now.toFixed(3);
-    return {
-      ok: true,
-      status: `START set @ ${now.toFixed(3)}s. Play to the rally's end, then Mark END.`,
-    };
+    return { ok: true, key: "status.startSet", params: { t: now.toFixed(3) } };
   }
 
   markEnd(now: number | null): OpResult {
-    if (now == null)
-      return { ok: false, status: "No media playing -- cannot mark END." };
+    if (now == null) return { ok: false, key: "status.noMediaEnd" };
     this.endField = now.toFixed(3);
-    return {
-      ok: true,
-      status: `END set @ ${now.toFixed(3)}s. Choose the Ending reason, then click Save Rally.`,
-    };
+    return { ok: true, key: "status.endSet", params: { t: now.toFixed(3) } };
   }
 
   saveRally(): OpResult {
     let s = fieldNum(this.startField);
     let e = fieldNum(this.endField);
-    if (s == null)
-      return { ok: false, status: "Set a START time first (click Mark START)." };
-    if (e == null)
-      return { ok: false, status: "Set an END time first (click Mark END)." };
+    if (s == null) return { ok: false, key: "status.needStart" };
+    if (e == null) return { ok: false, key: "status.needEnd" };
     if (e < s) {
       const t = s;
       s = e;
       e = t;
     } // tolerate reversed marks
-    if (e <= s)
-      return { ok: false, status: "END must be later than START (rally must be > 0s)." };
+    if (e <= s) return { ok: false, key: "status.zeroLength" };
 
     const reason = this.reason || REASON_DEFAULT;
     const sport = this.sport || SPORTS[0];
@@ -234,45 +224,33 @@ export class Annotator {
       const res = this.persist(this.rows);
       if (!res.ok) {
         Object.assign(r, backup);
-        return { ok: false, status: "WRITE FAILED: " + res.err };
+        return { ok: false, key: "status.writeFailed", params: { err: String(res.err) } };
       }
-      const status = `Updated rally #${r.n}: ${s.toFixed(3)} -> ${e.toFixed(3)} [${reason}, ${sport}].`;
+      const params = { n: r.n, s: s.toFixed(3), e: e.toFixed(3), reason, sport };
       this.resetForm();
-      return { ok: true, status };
+      return { ok: true, key: "status.updated", params };
     }
 
     const n = this.plannedNextNumber();
-    if (this.indexOfRally(n) !== -1)
-      return {
-        ok: false,
-        status: `Rally #${n} already exists -- set "Next rally #" to a free number.`,
-      };
+    if (this.indexOfRally(n) !== -1) return { ok: false, key: "status.duplicate", params: { n } };
     const row: RallyRow = { n, s, e, reason, sport, shots, extra: null };
     this.rows.push(row);
     const res = this.persist(this.rows);
     if (!res.ok) {
       this.rows.pop();
-      return { ok: false, status: "WRITE FAILED: " + res.err };
+      return { ok: false, key: "status.writeFailed", params: { err: String(res.err) } };
     }
     this.nextField = String(this.nextFreeFrom(n + 1));
-    const status = `Saved rally #${n}: ${s.toFixed(3)} -> ${e.toFixed(3)} [${reason}, ${sport}].`;
+    const params = { n, s: s.toFixed(3), e: e.toFixed(3), reason, sport };
     this.resetForm();
-    return { ok: true, status };
+    return { ok: true, key: "status.saved", params };
   }
 
   editSelected(n: number | null): OpResult {
-    if (this.isArmed())
-      return {
-        ok: false,
-        status:
-          "Finish the current rally ('Save Rally') or clear it ('Undo last') before " +
-          "editing another -- your unsaved START -> END would be lost.",
-      };
-    if (n == null)
-      return { ok: false, status: "Pick a rally in the Recent list first, then Edit selected." };
+    if (this.isArmed()) return { ok: false, key: "status.editGuard" };
+    if (n == null) return { ok: false, key: "status.needSelectEdit" };
     const idx = this.indexOfRally(n);
-    if (idx === -1)
-      return { ok: false, status: `Rally #${n} not found (try Refresh).` };
+    if (idx === -1) return { ok: false, key: "status.notFound", params: { n } };
     const r = this.rows[idx];
     this.mode = "edit";
     this.editIndex = idx;
@@ -281,50 +259,45 @@ export class Annotator {
     this.shotsField = r.shots != null ? r.shots : "";
     this.reason = r.reason || REASON_DEFAULT;
     this.sport = r.sport || this.sport;
-    return {
-      ok: true,
-      status: `Editing rally #${r.n}. Adjust Start/End/reason, then Save changes. (Undo last cancels.)`,
-    };
+    return { ok: true, key: "status.editing", params: { n: r.n } };
   }
 
   deleteSelected(n: number | null): OpResult {
-    if (n == null)
-      return { ok: false, status: "Pick a rally in the Recent list first, then Delete selected." };
+    if (n == null) return { ok: false, key: "status.needSelectDelete" };
     const idx = this.indexOfRally(n);
-    if (idx === -1)
-      return { ok: false, status: `Rally #${n} not found (try Refresh).` };
+    if (idx === -1) return { ok: false, key: "status.notFound", params: { n } };
     const removed = this.rows.splice(idx, 1)[0];
     const res = this.persist(this.rows);
     if (!res.ok) {
       this.rows.splice(idx, 0, removed);
-      return { ok: false, status: "WRITE FAILED: " + res.err };
+      return { ok: false, key: "status.writeFailed", params: { err: String(res.err) } };
     }
     this.resetForm();
     this.refreshNextField();
-    return { ok: true, status: `Deleted rally #${n}. ${this.rows.length} remaining.` };
+    return { ok: true, key: "status.deleted", params: { n, count: this.rows.length } };
   }
 
   // 3-way: cancel edit / clear in-progress mark / drop the last committed row.
   undoLast(): OpResult {
     if (this.mode === "edit") {
       this.resetForm();
-      return { ok: true, status: "Edit cancelled." };
+      return { ok: true, key: "status.editCancelled" };
     }
     const s = fieldNum(this.startField);
     const e = fieldNum(this.endField);
     if (s != null || e != null) {
       this.resetForm();
-      return { ok: true, status: "Cleared the in-progress START/END (nothing was written)." };
+      return { ok: true, key: "status.clearedMark" };
     }
-    if (this.rows.length === 0) return { ok: false, status: "Nothing to undo." };
+    if (this.rows.length === 0) return { ok: false, key: "status.nothingUndo" };
     const last = this.rows.pop()!;
     const res = this.persist(this.rows);
     if (!res.ok) {
       this.rows.push(last);
-      return { ok: false, status: "WRITE FAILED: " + res.err };
+      return { ok: false, key: "status.writeFailed", params: { err: String(res.err) } };
     }
     this.refreshNextField();
-    return { ok: true, status: `Removed last rally #${last.n}. ${this.rows.length} remaining.` };
+    return { ok: true, key: "status.removedLast", params: { n: last.n, count: this.rows.length } };
   }
 
   toCSV(): string {

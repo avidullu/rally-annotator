@@ -117,7 +117,7 @@ describe("validation", () => {
     a.markEnd(4);
     const res = a.saveRally();
     expect(res.ok).toBe(false);
-    expect(res.status).toContain("already exists");
+    expect(res.key).toBe("status.duplicate");
   });
 });
 
@@ -128,7 +128,7 @@ describe("unsaved-rally guard (v1.6.4)", () => {
     a.markEnd(2);
     const res = a.markStart(3);
     expect(res.ok).toBe(false);
-    expect(res.status).toContain("UNSAVED");
+    expect(res.key).toBe("status.unsavedGuard");
     expect(a.startField).toBe("1.000"); // unchanged
   });
 
@@ -148,7 +148,7 @@ describe("3-way undo", () => {
     a.editSelected(1);
     expect(a.mode).toBe("edit");
     const res = a.undoLast();
-    expect(res.status).toBe("Edit cancelled.");
+    expect(res.key).toBe("status.editCancelled");
     expect(a.mode).toBe("new");
   });
 
@@ -156,7 +156,7 @@ describe("3-way undo", () => {
     const { a, store } = make();
     a.markStart(1);
     const res = a.undoLast();
-    expect(res.status).toContain("Cleared");
+    expect(res.key).toBe("status.clearedMark");
     expect(a.startField).toBe("");
     expect(store.writes).toBe(0);
   });
@@ -179,9 +179,9 @@ describe("edit mode", () => {
   it("relabels Mark/Save buttons to make edit mode unmissable", () => {
     const { a } = make("3,1,2,winner,badminton,\n");
     a.editSelected(3);
-    expect(a.markStartLabel()).toBe("Re-mark START (#3)");
-    expect(a.markEndLabel()).toBe("Re-mark END (#3)");
-    expect(a.saveLabel()).toBe("Save changes (#3)");
+    expect(a.markStartLabel()).toEqual({ key: "btn.reMarkStart", params: { n: 3 } });
+    expect(a.markEndLabel()).toEqual({ key: "btn.reMarkEnd", params: { n: 3 } });
+    expect(a.saveLabel()).toEqual({ key: "btn.saveChangesN", params: { n: 3 } });
   });
 
   it("loads the row's fields (incl. shots) and keeps the same rally_number on save", () => {
@@ -213,10 +213,10 @@ describe("delete", () => {
 describe("save-button label in new mode", () => {
   it("shows the planned number once both times are set", () => {
     const { a } = make();
-    expect(a.saveLabel()).toBe("Save Rally");
+    expect(a.saveLabel()).toEqual({ key: "btn.saveRally" });
     a.markStart(1);
     a.markEnd(2);
-    expect(a.saveLabel()).toBe("Save Rally (#1)");
+    expect(a.saveLabel()).toEqual({ key: "btn.saveRallyN", params: { n: 1 } });
   });
 });
 
@@ -234,7 +234,7 @@ describe("write-failure rollback", () => {
     a.markEnd(2);
     const res = a.saveRally();
     expect(res.ok).toBe(false);
-    expect(res.status).toContain("WRITE FAILED");
+    expect(res.key).toBe("status.writeFailed");
     expect(a.rows).toHaveLength(0);
   });
 
