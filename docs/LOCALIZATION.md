@@ -98,10 +98,10 @@ largest block — phase it after the UI strings.
 1. ✅ **docs** (this file) — PR #17.
 2. ✅ **web i18n infra** — `t()` shim + `en` catalog + selector + CI gates + tests — PR #18.
 3. ✅ **web translations** — the six AI-drafted catalogs + Noto-aware fonts + per-locale screencasts — PR #19.
-4. ✅ **VLC chrome i18n** (v1.7) — Lua `STRINGS` table (machine drafts) + a **Language** selector that
+4. ✅ **VLC i18n** (v1.7 → v1.7.1) — Lua `STRINGS` table (machine drafts) + a **Language** selector that
    rebuilds the dialog + persists the choice + **id-based canonical reason/sport** so the CSV is unchanged;
-   key-parity + language-switch tests + regenerated layout snapshot. Localizes the dialog **chrome**
-   (labels, buttons, reason/sport display).
-5. ⏳ **Next:** localize the VLC **status messages** + the long **ending-reason HELP guide** (the large prose
-   block); **native-speaker review** of every machine-draft catalog (the quality gate); bundled OFL Noto
-   fonts for guaranteed offline rendering.
+   key-parity + language-switch tests. v1.7 localized the **chrome**; **v1.7.1 completes it** — the
+   **status messages** and the full in-dialog **ending-reason HELP guide** are localized too (81
+   keys/locale). The whole dialog is now translated.
+5. ⏳ **Remaining:** **native-speaker review** of every machine-draft catalog (web + VLC) — the quality
+   gate before any launch; and bundled OFL Noto fonts for guaranteed offline rendering.

@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.7.1 — 2026-06-22
+- **Completes the localization:** the dialog's **status messages** and the full in-dialog **HELP /
+  ending-reason guide** are now localized into all 7 languages too (en/hi/kn/te/es/da/id) — so the
+  *entire* dialog is translated, not just the chrome. Status lines show localized reason/sport labels
+  while the CSV keeps **canonical English** values (mapped via the dropdown id). The machine-draft
+  catalogs remain **pending native-speaker review**.
+- The `STRINGS` table now carries 81 keys/locale; the headless suite's key-parity gate spans them all.
+  **88 assertions** green (`lua5.1 test/dialog_test.lua`); `luac5.1 -p` clean.
+
 ## v1.7 — 2026-06-22
 - **Localized dialog chrome** into 7 languages — English, Hindi, Kannada, Telugu, Spanish, Danish,
   Indonesian (the [Khelsutra](https://khelsutra.guru) set + Telugu). A new **Language** selector (with a

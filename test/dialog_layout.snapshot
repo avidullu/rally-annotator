@@ -1,4 +1,4 @@
-title :: Rally Annotator v1.7
+title :: Rally Annotator v1.7.1
  1. label      @(1,1) 1x1 :: Sport:
  2. dropdown   @(2,1) 2x1 :: [badminton, tennis, table tennis, pickleball, padel]
  3. button     @(4,1) 1x1 :: Help

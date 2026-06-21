@@ -132,9 +132,9 @@ in **[docs/ENDING_REASONS.md](docs/ENDING_REASONS.md)** (also available via the 
 ## Roadmap
 - [ ] Live-test the v1.6 dialog in VLC (single Play / Pause toggle, optional Number of shots, two-step Save,
       `unknown`-default reason, editable times, Next rally #, Recent-rallies Edit/Delete) across all five sports.
-- [x] **Localization** into Khelsutra's languages + Telugu (en/hi/kn/te/es/da/id): the browser
-      extension is fully localized; the VLC dialog **chrome** is localized (status messages + the
-      ending-reason guide are the next phase). Machine drafts pending native review — see
+- [x] **Localization** into Khelsutra's languages + Telugu (en/hi/kn/te/es/da/id): **both front-ends
+      fully localized** — the browser extension and the *entire* VLC dialog (chrome, status messages, and
+      the in-dialog ending-reason guide). Machine drafts pending native review — see
       [docs/LOCALIZATION.md](docs/LOCALIZATION.md).
 - [ ] Optional per-sport reason presets / hotkeys.
 - [x] **Browser front-end for web video incl. YouTube** — Chrome MV3 extension emitting the same CSV
