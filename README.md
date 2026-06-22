@@ -130,8 +130,9 @@ forced-vs-unforced, **default to `unforced_error`**. See the full decision guide
 in **[docs/ENDING_REASONS.md](docs/ENDING_REASONS.md)** (also available via the in-plugin **Help** button).
 
 ## Roadmap
-- [ ] Live-test the v1.6 dialog in VLC (single Play / Pause toggle, optional Number of shots, two-step Save,
-      `unknown`-default reason, editable times, Next rally #, Recent-rallies Edit/Delete) across all five sports.
+- [ ] Live-test the **v1.7.1** dialog in VLC across all five sports — playback toggle, two-step Save,
+      editable times, Next rally #, Recent-rallies Edit/Delete, and the new **Language** selector (confirm
+      Devanagari/Kannada/Telugu render in VLC's Qt dialog). *(Manual GUI QA — there's no headless VLC automation.)*
 - [x] **Localization** into Khelsutra's languages + Telugu (en/hi/kn/te/es/da/id): **both front-ends
       fully localized** — the browser extension and the *entire* VLC dialog (chrome, status messages, and
       the in-dialog ending-reason guide). Machine drafts pending native review — see
@@ -148,7 +149,7 @@ The dialog logic has a headless test suite that stubs VLC's `vlc` API (widgets +
 extension, drives its callbacks, and asserts the results — run with **Lua 5.1** (the interpreter VLC 3.x embeds):
 
 ```bash
-lua5.1 test/dialog_test.lua        # exit 0 = pass; covers reason reset, shots column, numbering, undo, help toggle, Play/Pause toggle
+lua5.1 test/dialog_test.lua        # exit 0 = pass; covers reason reset, shots, numbering, undo, help toggle, Play/Pause, i18n key-parity + language switch
 ```
 
 It covers all the logic but not VLC's GUI rendering or real playback (there's no headless VLC UI automation) — those
