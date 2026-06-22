@@ -15,10 +15,13 @@ that feeds the Khelsutra rally-segmentation pipeline.
 ## Status (v0.1.0)
 
 Works now:
-- Full v1.6.4 dialog parity: two-step Mark→Save, non-sticky reason (default `unknown`), sticky
+- Full v1.7.1 dialog parity: two-step Mark→Save, non-sticky reason (default `unknown`), sticky
   sport, editable Start/End, `Next rally #` continuity + auto-advance, **Number of shots**, 3-way
   Undo, edit-mode **Re-mark (#N)** relabel, **unsaved-rally guard**, recent-rallies list (all,
   oldest-first), Back 5s / Play-Pause / Fwd 5s.
+- **Localized into 7 languages** (English, Hindi, Kannada, Telugu, Spanish, Danish, Indonesian) with a
+  persisted in-panel language selector — machine-draft translations pending native review (see
+  [../docs/LOCALIZATION.md](../docs/LOCALIZATION.md)).
 - Controls any **direct HTML5 `<video>`** in the top frame, including videos in (open/closed)
   shadow DOM and **youtube.com/watch** (its player is in the main page).
 - Rallies autosave to extension storage keyed per video → reloading the page resumes numbering.

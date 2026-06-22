@@ -93,7 +93,7 @@ point at the current video and load its rallies. (Playback *position* isn't rest
 > Add-ons** is VLC's own add-on info dialog; its body ("Lua script") is a constant baked into VLC and **can't be
 > set by an extension**. Use the **Help** button inside the Rally Annotator dialog instead. (The descriptor's
 > description does show in the *Active Extensions* tab's **"More information"** dialog, and the *Active Extensions*
-> list shows the title with its version, e.g. **`Rally Annotator v1.6.3`**, so you can confirm which build is loaded.)
+> list shows the title with its version (it tracks the plugin's `VERSION`, currently **`Rally Annotator v1.7.1`**), so you can confirm which build is loaded.)
 
 ## Sports & taxonomy
 Net-separated racquet sports share a forced/unforced-error point-stop taxonomy, so one tool covers them all:
@@ -131,8 +131,9 @@ in **[docs/ENDING_REASONS.md](docs/ENDING_REASONS.md)** (also available via the 
 
 ## Roadmap
 - [x] **Live-tested the v1.7.1 dialog in real VLC** — loads and renders correctly, the new **Language**
-      selector rebuilds the whole dialog, and **Kannada / Telugu / Hindi render crisply in VLC's Qt**
-      (the Indic-font-rendering risk is resolved via the system Noto/Nirmala fonts). The mark→save logic is
+      selector rebuilds the whole dialog, and **Kannada / Telugu / Hindi render crisply in VLC's Qt** with
+      the system Noto/Nirmala fonts on the tested machine (bundling OFL Noto for guaranteed offline / any-machine
+      rendering is a tracked follow-up — see [docs/LOCALIZATION.md](docs/LOCALIZATION.md)). The mark→save logic is
       covered by the headless suite (88 assertions); per-sport marking spot-checks on real clips still welcome.
 - [x] **Localization** into Khelsutra's languages + Telugu (en/hi/kn/te/es/da/id): **both front-ends
       fully localized** — the browser extension and the *entire* VLC dialog (chrome, status messages, and
