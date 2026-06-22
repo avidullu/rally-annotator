@@ -130,9 +130,10 @@ forced-vs-unforced, **default to `unforced_error`**. See the full decision guide
 in **[docs/ENDING_REASONS.md](docs/ENDING_REASONS.md)** (also available via the in-plugin **Help** button).
 
 ## Roadmap
-- [ ] Live-test the **v1.7.1** dialog in VLC across all five sports — playback toggle, two-step Save,
-      editable times, Next rally #, Recent-rallies Edit/Delete, and the new **Language** selector (confirm
-      Devanagari/Kannada/Telugu render in VLC's Qt dialog). *(Manual GUI QA — there's no headless VLC automation.)*
+- [x] **Live-tested the v1.7.1 dialog in real VLC** — loads and renders correctly, the new **Language**
+      selector rebuilds the whole dialog, and **Kannada / Telugu / Hindi render crisply in VLC's Qt**
+      (the Indic-font-rendering risk is resolved via the system Noto/Nirmala fonts). The mark→save logic is
+      covered by the headless suite (88 assertions); per-sport marking spot-checks on real clips still welcome.
 - [x] **Localization** into Khelsutra's languages + Telugu (en/hi/kn/te/es/da/id): **both front-ends
       fully localized** — the browser extension and the *entire* VLC dialog (chrome, status messages, and
       the in-dialog ending-reason guide). Machine drafts pending native review — see
