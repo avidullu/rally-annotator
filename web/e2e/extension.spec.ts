@@ -5,8 +5,8 @@ import { fileURLToPath } from "node:url";
 
 // Proof-and-validation E2E: load the ACTUAL built extension into a real Chromium and, for
 // EACH supported locale, switch the panel's language, prove the UI renders in that language,
-// then mark a rally on a real seekable <video> and verify it persists with CANONICAL
-// (English) reason/sport values. Each locale's session is screen-recorded to
+// then mark a rally on a real seekable <video>, reload the page, and verify it persists
+// with CANONICAL (English) reason/sport values. Each locale's session is screen-recorded to
 // e2e-results/screencasts/<locale>.webm — the downloadable per-language proof.
 // Extensions load only in Chromium and require a headed context (xvfb in CI).
 //
@@ -109,6 +109,21 @@ for (const locale of SUPPORTED_LOCALES) {
       expect(list).toHaveLength(1);
       expect(list[0]).toMatchObject({ n: 1, reason: "winner", sport: "badminton", shots: "12" });
       expect(Number(list[0].e)).toBeGreaterThan(Number(list[0].s));
+
+      // Reload persistence proof: content script should rehydrate chrome.storage.local rows,
+      // keep the locale choice, and resume numbering from the saved rally.
+      await page.reload();
+      await page.waitForFunction(() => (window as any).__videoReady === true, { timeout: 20_000 });
+      await sw.evaluate(async () => {
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        const id = tabs[0]?.id;
+        if (id != null) await chrome.tabs.sendMessage(id, { type: "toggle-panel" });
+      });
+      await expect(page.getByRole("button", { name: T("btn.markStart") })).toBeVisible();
+      await expect(page.locator("select[name=language]")).toHaveValue(locale);
+      await expect(page.locator(".item")).toHaveCount(1);
+      await expect(page.locator(".item").first()).toContainText("#1");
+      await expect(page.locator("input[name=next]")).toHaveValue("2");
     } finally {
       const video = page.video();
       await context.close(); // finalizes the recording

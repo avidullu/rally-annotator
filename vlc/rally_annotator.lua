@@ -79,7 +79,7 @@
   then VLC > Tools > Plugins and extensions > Reload extensions (or restart),
   then enable it from the View menu.
 
-  MIT licensed. https://github.com/avidullu/rally-annotator
+  MIT licensed. https://github.com/Khelsutra/rally-annotator
 ]]
 
 --------------------------------------------------------------------------------
@@ -96,7 +96,7 @@ function descriptor()
     title       = "Rally Annotator v" .. VERSION,
     version     = VERSION,
     author      = "Avi Dullu",
-    url         = "https://github.com/avidullu/rally-annotator",
+    url         = "https://github.com/Khelsutra/rally-annotator",
     shortdesc   = "Mark rally start/end + a point-ending reason to a CSV (net-separated racquet sports)",
     description =
         "Mark each rally's START and END while you watch, tag WHY the point ended "
