@@ -3,6 +3,7 @@ import { Annotator } from "../src/state/annotator";
 import { DirectVideoHandler } from "../src/video/directVideo";
 import { deriveIdentity, loadRows, saveRows, csvFilename } from "../src/persist/store";
 import { mountPanel } from "../src/ui/panel";
+import { getLocale, setLocale, negotiateLocale, type Locale } from "../src/i18n";
 import type { RuntimeMessage } from "../src/messages";
 
 // Top-frame content script: derives the per-video identity, loads any saved rallies,
@@ -18,6 +19,10 @@ export default defineContentScript({
     const identity = deriveIdentity();
     const video = new DirectVideoHandler();
     const rows = await loadRows(identity.key);
+
+    // LD-i8: seed the locale from the stored preference, falling back to the browser language.
+    const stored = await browser.storage.local.get("lang");
+    setLocale(negotiateLocale(stored.lang, navigator.languages));
 
     const annotator = new Annotator({
       rows,
@@ -39,6 +44,9 @@ export default defineContentScript({
           filename: csvFilename(identity.title),
           csv,
         } as RuntimeMessage),
+      onLocaleChange: (locale: Locale) => {
+        void browser.storage.local.set({ lang: locale });
+      },
     });
 
     panel.toggle(); // start hidden; the toolbar icon reveals it on pages you want to annotate

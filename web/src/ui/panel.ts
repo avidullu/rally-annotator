@@ -261,7 +261,7 @@ export function mountPanel(deps: PanelDeps): PanelHandle {
         })
       );
     }
-    lines.push(t("status.footer", { now: fmtClock(video.now()), count: a.rows.length }));
+    lines.push(t("status.footer", { now: fmtClock(video.peekNow()), count: a.rows.length }));
     status.innerHTML =
       lines.map(esc).join("<br>") +
       `<br><span class="mini">${esc(t("status.csvLine", { key: deps.identity.key }))}</span>`;
@@ -372,8 +372,17 @@ export function mountPanel(deps: PanelDeps): PanelHandle {
   window.addEventListener("mousemove", onMove);
   window.addEventListener("mouseup", onUp);
 
-  // ---- live clock ----
-  const clock = window.setInterval(render, 333);
+  // ---- live clock (only ticks while the panel is visible) ----
+  let clock: number | null = null;
+  const startClock = () => {
+    if (clock == null) clock = window.setInterval(render, 333);
+  };
+  const stopClock = () => {
+    if (clock != null) {
+      window.clearInterval(clock);
+      clock = null;
+    }
+  };
 
   // ---- fullscreen re-parent (so the panel survives fullscreen video; desktop) ----
   const onFs = () => {
@@ -389,10 +398,13 @@ export function mountPanel(deps: PanelDeps): PanelHandle {
 
   const api: PanelHandle = {
     toggle() {
-      host.style.display = host.style.display === "none" ? "" : "none";
+      const willShow = host.style.display === "none";
+      host.style.display = willShow ? "" : "none";
+      if (willShow) startClock();
+      else stopClock();
     },
     destroy() {
-      window.clearInterval(clock);
+      stopClock();
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
       document.removeEventListener("fullscreenchange", onFs);

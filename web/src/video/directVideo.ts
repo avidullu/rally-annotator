@@ -66,6 +66,17 @@ export class DirectVideoHandler {
     return v ? v.currentTime : null;
   }
 
+  /**
+   * Read currentTime from the CACHED video element only — no DOM scan.
+   * Use this for high-frequency polling (e.g. the panel clock) so a
+   * hidden panel on a video-less page doesn't trigger a full shadow-piercing
+   * querySelectorAll("*") walk every 333ms.
+   */
+  peekNow(): number | null {
+    const v = this.current;
+    return v && v.isConnected ? v.currentTime : null;
+  }
+
   duration(): number | null {
     const v = this.active();
     return v && Number.isFinite(v.duration) ? v.duration : null;
